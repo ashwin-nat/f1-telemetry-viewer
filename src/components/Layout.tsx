@@ -156,7 +156,7 @@ export function Layout() {
             <div className="mx-auto flex max-w-5xl items-center justify-between gap-6">
               <div className="min-w-0">
                 <h2 className="text-lg font-bold tracking-tight">
-                  <span className="text-red-500">F1</span> Telemetry Viewer
+                  <span className="text-red-500">F1</span> Save Viewer
                 </h2>
                 <p className="mt-0.5 text-sm text-zinc-400">
                   Dive into your{" "}
