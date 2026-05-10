@@ -39,7 +39,7 @@ function AppRoutes() {
 }
 
 const analyticsEnabled = import.meta.env.VITE_DISABLE_ANALYTICS !== "true";
-const appVersion = import.meta.env.VITE_APP_VERSION as string | undefined;
+const appVersion = (window as Window & { __PNG_VERSION__?: string }).__PNG_VERSION__;
 if (appVersion) {
   document.title = `Pits n' Giggles - Save v${appVersion}`;
 }
