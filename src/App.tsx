@@ -7,6 +7,7 @@ import { TrackProgressPage } from "./pages/TrackProgressPage";
 import { TelemetryProvider, useTelemetry } from "./context/TelemetryContext";
 import { ZipUploadScreen } from "./components/ZipUploadScreen";
 import { GlobalDropZone } from "./components/GlobalDropZone";
+import { PNG_VERSION_TITLE_PREFIX } from "./config/branding";
 
 function AppRoutes() {
   const { mode, sessions, sessionsLoading, showUploadModal } = useTelemetry();
@@ -41,7 +42,7 @@ function AppRoutes() {
 const analyticsEnabled = import.meta.env.VITE_DISABLE_ANALYTICS !== "true";
 const appVersion = (window as Window & { __PNG_VERSION__?: string }).__PNG_VERSION__;
 if (appVersion) {
-  document.title = `Pits n' Giggles - Save v${appVersion}`;
+  document.title = `${PNG_VERSION_TITLE_PREFIX} v${appVersion}`;
 }
 
 export function App() {
