@@ -51,7 +51,9 @@ Telemetry filenames follow the pattern `[SessionType]_[Track]_YYYY_MM_DD_HH_mm_s
 
 **Mode detection:** On mount, `TelemetryContext` runs: `/api/sessions` → `/demo/sessions.json` → upload mode. `VITE_SKIP_API=true` skips the API step (used by `dev:prod`).
 
-**Formula handling:** F1 is the primary/default formula and is usually implied in the UI. Non-F1 sessions (for example F2) are still listed in the sidebar and render on their own session pages, but aggregate analytics default to F1 when mixed formula data exists. Track pages show a formula switcher only when that track has multiple formulas; F2-only tracks fall back to F2.
+**Formula handling:** F1 is the primary/default formula and is usually implied in the UI. Non-F1 sessions (for example F2) are still listed in the sidebar and render on their own session pages, but aggregate analytics default to F1 when mixed formula data exists. F1 26 / 2026 Season Pack sessions are still part of the broad F1 family, but PB/history comparisons use a generation-aware comparison key so `F1 26` does not compare against older F1 Modern sessions. Track pages show a formula switcher when a track has multiple comparison groups; F2-only tracks fall back to F2.
+
+**ERS handling:** Pits n' Giggles F1 26 saved sessions can deploy more than the 4 MJ battery capacity per lap because the 2026 ruleset has no fixed deploy limit. Display ERS deployment as energy (`MJ/lap`), preferring `per-lap-info[].ers-stats["ers-deployed-j"]` and falling back to `car-status-data["ers-deployed-this-lap"]` for older exports. Keep battery-store values as percentages only when explicitly showing remaining store.
 
 **Styling:** Dark theme (slate-950 background). All styling via Tailwind utility classes.
 

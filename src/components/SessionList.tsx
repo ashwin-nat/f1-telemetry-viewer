@@ -3,7 +3,7 @@ import { NavLink } from "react-router-dom";
 import { useSessionList } from "../hooks/useSessionList";
 import type { SessionSummary } from "../types/telemetry";
 import { formatDate, formatTime, formatSessionType, toTrackSlug, sortTracksByCalendar } from "../utils/format";
-import { isQualifyingSessionType, isRaceSessionType } from "../utils/sessionTypes";
+import { getFormulaComparisonKey, isQualifyingSessionType, isRaceSessionType } from "../utils/sessionTypes";
 import { TrackFlag } from "./TrackFlag";
 import { SessionCard } from "./SessionCard";
 
@@ -62,13 +62,12 @@ export function SessionList() {
 
   // Compute best lap time per track (lowest ms wins)
   const bestTimeByTrack: Record<string, number> = {};
-  const bestTimeStrByTrack: Record<string, string> = {};
   for (const s of filteredSessions) {
     if (s.bestLapTimeMs && s.bestLapTimeMs > 0) {
-      const prev = bestTimeByTrack[s.track];
+      const key = `${s.track}::${getFormulaComparisonKey(s.formula)}`;
+      const prev = bestTimeByTrack[key];
       if (!prev || s.bestLapTimeMs < prev) {
-        bestTimeByTrack[s.track] = s.bestLapTimeMs;
-        if (s.bestLapTime) bestTimeStrByTrack[s.track] = s.bestLapTime;
+        bestTimeByTrack[key] = s.bestLapTimeMs;
       }
     }
   }
@@ -181,7 +180,7 @@ export function SessionList() {
                       time={formatTime(s.date)}
                       lapIndicators={s.lapIndicators}
                       bestLapTime={s.bestLapTime}
-                      isTrackBest={!!s.bestLapTimeMs && s.bestLapTimeMs === bestTimeByTrack[s.track]}
+                      isTrackBest={!!s.bestLapTimeMs && s.bestLapTimeMs === bestTimeByTrack[`${s.track}::${getFormulaComparisonKey(s.formula)}`]}
                       aiDifficulty={s.aiDifficulty}
                       isSpectator={s.isSpectator}
                       formula={s.formula}
@@ -195,7 +194,16 @@ export function SessionList() {
         {tab === "tracks" &&
           tracks.map((track) => {
             const count = sessions.filter((s) => s.track === track).length;
-            const bestTime = bestTimeStrByTrack[track];
+            const trackSessions = filteredSessions.filter((s) => s.track === track);
+            const latestFormulaKey = trackSessions
+              .map((s) => ({
+                formulaKey: getFormulaComparisonKey(s.formula),
+                time: new Date(s.date).getTime(),
+              }))
+              .sort((a, b) => b.time - a.time)[0]?.formulaKey;
+            const bestTime = trackSessions
+              .filter((s) => getFormulaComparisonKey(s.formula) === latestFormulaKey && s.bestLapTimeMs)
+              .sort((a, b) => (a.bestLapTimeMs ?? Infinity) - (b.bestLapTimeMs ?? Infinity))[0]?.bestLapTime;
             return (
               <NavLink
                 key={track}

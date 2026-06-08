@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
   LineChart,
   Line,
@@ -21,7 +21,7 @@ import { msToLapTime, msToSectorTime, formatSessionType, formatTime, formatDate,
 import { TrackFlag } from "../components/TrackFlag";
 import { CompoundStatCard } from "../components/CompoundStatCard";
 import { CHART_THEME, TOOLTIP_STYLE } from "../utils/colors";
-import { getFormulaKey, getFormulaLabel, isPrimaryFormula } from "../utils/sessionTypes";
+import { getFormulaComparisonKey, getFormulaLabel, isPrimaryFormula, shouldShowFormulaLabel } from "../utils/sessionTypes";
 import { cardClass, cardClassCompact } from "../components/Card";
 import { Upload, ArrowLeft } from "lucide-react";
 import { CarSetupCard } from "../components/CarSetupCard";
@@ -112,15 +112,12 @@ function deduplicateRuns(sessions: TrackSessionData[]): TrackSessionData[] {
 
 export function TrackProgressPage() {
   const { trackId } = useParams<{ trackId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { sessions } = useSessionList();
   const { getSession, mode, setShowUploadModal } = useTelemetry();
   const [data, setData] = useState<TrackSessionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"qualifying" | "race">("race");
-  const [formulaSelection, setFormulaSelection] = useState<{ trackId: string; key: string }>({
-    trackId: "",
-    key: "f1",
-  });
 
   // Case-insensitive match: slug is lowercase, track names from data may be capitalized
   const allTrackSessions = useMemo(
@@ -128,35 +125,39 @@ export function TrackProgressPage() {
     [sessions, trackId],
   );
   const formulaOptions = useMemo(() => {
-    const byKey = new Map<string, { key: string; label: string; count: number; isPrimary: boolean }>();
+    const byKey = new Map<string, { key: string; label: string; count: number; isPrimary: boolean; showLabel: boolean; latestMs: number }>();
     for (const session of allTrackSessions) {
-      const key = getFormulaKey(session.formula);
+      const key = getFormulaComparisonKey(session.formula);
+      const sessionMs = new Date(session.date).getTime();
       const option = byKey.get(key);
       if (option) {
         option.count += 1;
+        option.latestMs = Math.max(option.latestMs, sessionMs);
       } else {
         byKey.set(key, {
           key,
           label: getFormulaLabel(session.formula),
           count: 1,
           isPrimary: isPrimaryFormula(session.formula),
+          showLabel: shouldShowFormulaLabel(session.formula),
+          latestMs: sessionMs,
         });
       }
     }
     return [...byKey.values()].sort((a, b) => {
       if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+      if (a.latestMs !== b.latestMs) return b.latestMs - a.latestMs;
       return a.label.localeCompare(b.label);
     });
   }, [allTrackSessions]);
   const defaultFormulaKey = formulaOptions.find((f) => f.isPrimary)?.key ?? formulaOptions[0]?.key ?? "f1";
-  const activeFormulaKey =
-    formulaSelection.trackId === (trackId ?? "") &&
-    formulaOptions.some((formula) => formula.key === formulaSelection.key)
-      ? formulaSelection.key
-      : defaultFormulaKey;
+  const requestedFormulaKey = searchParams.get("formula");
+  const activeFormulaKey = requestedFormulaKey && formulaOptions.some((formula) => formula.key === requestedFormulaKey)
+    ? requestedFormulaKey
+    : defaultFormulaKey;
 
   const trackSessions = allTrackSessions.filter(
-    (s) => getFormulaKey(s.formula) === activeFormulaKey,
+    (s) => getFormulaComparisonKey(s.formula) === activeFormulaKey,
   );
   const trackSessionKey = trackSessions.map((s) => s.slug).join("|");
   const activeFormula = formulaOptions.find((f) => f.key === activeFormulaKey);
@@ -444,7 +445,7 @@ export function TrackProgressPage() {
             {displayTrackName}
           </h2>
           <p className="text-sm text-zinc-500">
-            {activeFormula && !activeFormula.isPrimary ? `${activeFormula.label} · ` : ""}
+            {activeFormula?.showLabel ? `${activeFormula.label} · ` : ""}
             {data.length} session{data.length !== 1 ? "s" : ""}{(() => {
               const totalAttempts = data.reduce((sum, d) => sum + d.attemptCount, 0);
               return totalAttempts > data.length ? ` (${totalAttempts} total attempts)` : "";
@@ -458,7 +459,11 @@ export function TrackProgressPage() {
               {formulaOptions.map((formula) => (
                 <button
                   key={formula.key}
-                  onClick={() => setFormulaSelection({ trackId: trackId ?? "", key: formula.key })}
+                  onClick={() => {
+                    const nextParams = new URLSearchParams(searchParams);
+                    nextParams.set("formula", formula.key);
+                    setSearchParams(nextParams);
+                  }}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600 focus-visible:ring-offset-0 ${
                     activeFormulaKey === formula.key
                       ? "bg-zinc-800 text-zinc-100"

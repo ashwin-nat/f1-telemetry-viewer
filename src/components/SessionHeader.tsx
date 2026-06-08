@@ -5,8 +5,8 @@ import { Link } from "react-router-dom";
 import type { TelemetrySession } from "../types/telemetry";
 import { getBestLapTime, isRaceSession } from "../utils/stats";
 import { formatSessionType, msToLapTime, toTrackSlug } from "../utils/format";
-import { getTeamColor } from "../utils/colors";
-import { isNonF1Formula } from "../utils/sessionTypes";
+import { getTeamColor, getTeamName } from "../utils/colors";
+import { getFormulaLabel, shouldShowFormulaLabel } from "../utils/sessionTypes";
 import { TrackFlag } from "./TrackFlag";
 
 const EXT_LINK_TEMPLATE = import.meta.env.VITE_EXTERNAL_LINK_TEMPLATE as string | undefined;
@@ -38,7 +38,7 @@ export function SessionHeader({ session, focusedDriverIndex, onFocusedDriverChan
 
   const sessionType = formatSessionType(info["session-type"]);
   const TypeIcon = SESSION_ICONS[info["session-type"]] ?? SESSION_ICONS[sessionType] ?? Flag;
-  const showFormula = isNonF1Formula(info.formula);
+  const showFormula = shouldShowFormulaLabel(info.formula);
 
   let bestLapTimeStr: string | undefined;
   if (isQuali && focusedDriver) {
@@ -86,7 +86,7 @@ export function SessionHeader({ session, focusedDriverIndex, onFocusedDriverChan
         </span>
         {showFormula && (
           <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-xs font-semibold text-zinc-400">
-            {info.formula}
+            {getFormulaLabel(info.formula)}
           </span>
         )}
         {bestLapTimeStr && (
@@ -115,7 +115,7 @@ export function SessionHeader({ session, focusedDriverIndex, onFocusedDriverChan
               const prefix = pos ? `P${pos} ` : "";
               return (
                 <option key={d.index} value={d.index}>
-                  {prefix}{d["driver-name"]} — {d.team}{suffix}
+                  {prefix}{d["driver-name"]} — {getTeamName(d.team)}{suffix}
                 </option>
               );
             })}

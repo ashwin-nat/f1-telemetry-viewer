@@ -1,6 +1,6 @@
 import { Eye, Globe, Timer, Target, Flag, Gauge } from "lucide-react";
 import { TrackFlag } from "./TrackFlag";
-import { isNonF1Formula, isRaceSessionType } from "../utils/sessionTypes";
+import { getFormulaLabel, isRaceSessionType, shouldShowFormulaLabel } from "../utils/sessionTypes";
 
 interface SessionCardProps {
   sessionType: string;
@@ -34,7 +34,7 @@ export function SessionCard({ sessionType, track, time, lapIndicators, bestLapTi
       ? TYPE_CONFIG.Race
       : { color: "text-zinc-500", icon: Flag });
   const TypeIcon = typeConfig.icon;
-  const showFormula = isNonF1Formula(formula);
+  const showFormula = shouldShowFormulaLabel(formula);
 
   return (
     <div className="min-w-0">
@@ -62,7 +62,7 @@ export function SessionCard({ sessionType, track, time, lapIndicators, bestLapTi
             <span className="flex items-center gap-0.5 text-[10px] font-medium text-sky-500/70"><Globe className="size-3" />Online</span>
           )}
           {showFormula && (
-            <span className="text-[10px] font-semibold text-zinc-500">{formula}</span>
+            <span className="text-[10px] font-semibold text-zinc-500">{getFormulaLabel(formula)}</span>
           )}
         </div>
         <div className="flex items-center gap-1">
