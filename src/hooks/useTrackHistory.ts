@@ -33,6 +33,7 @@ export function useTrackHistory(
   trackName: string | undefined,
   currentSlug: string | undefined,
   formula: string | undefined,
+  gameYear: number | undefined,
 ): { pbs: TrackPBs | null; loading: boolean } {
   const { sessions } = useSessionList();
   const { getSession } = useTelemetry();
@@ -43,7 +44,7 @@ export function useTrackHistory(
     (s) =>
       s.track === trackName &&
       s.slug !== currentSlug &&
-      getFormulaComparisonKey(s.formula) === getFormulaComparisonKey(formula),
+      getFormulaComparisonKey(s.formula, s.gameYear) === getFormulaComparisonKey(formula, gameYear),
   );
   const trackSessionKey = trackSessions.map((s) => s.slug).join("|");
 
@@ -163,7 +164,7 @@ export function useTrackHistory(
     return () => {
       cancelled = true;
     };
-  }, [trackName, formula, trackSessionKey, getSession]);
+  }, [trackName, formula, gameYear, trackSessionKey, getSession]);
 
   return { pbs, loading };
 }

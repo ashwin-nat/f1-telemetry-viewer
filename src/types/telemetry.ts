@@ -5,6 +5,8 @@ export interface SessionSummary {
   sessionType: string;
   track: string;
   formula?: string;
+  gameYear?: number;
+  packetFormat?: number;
   date: string;
   validLapCount: number;
   lapIndicators?: ("valid" | "invalid" | "best")[];

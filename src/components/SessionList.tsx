@@ -64,7 +64,7 @@ export function SessionList() {
   const bestTimeByTrack: Record<string, number> = {};
   for (const s of filteredSessions) {
     if (s.bestLapTimeMs && s.bestLapTimeMs > 0) {
-      const key = `${s.track}::${getFormulaComparisonKey(s.formula)}`;
+      const key = `${s.track}::${getFormulaComparisonKey(s.formula, s.gameYear)}`;
       const prev = bestTimeByTrack[key];
       if (!prev || s.bestLapTimeMs < prev) {
         bestTimeByTrack[key] = s.bestLapTimeMs;
@@ -180,10 +180,11 @@ export function SessionList() {
                       time={formatTime(s.date)}
                       lapIndicators={s.lapIndicators}
                       bestLapTime={s.bestLapTime}
-                      isTrackBest={!!s.bestLapTimeMs && s.bestLapTimeMs === bestTimeByTrack[`${s.track}::${getFormulaComparisonKey(s.formula)}`]}
+                      isTrackBest={!!s.bestLapTimeMs && s.bestLapTimeMs === bestTimeByTrack[`${s.track}::${getFormulaComparisonKey(s.formula, s.gameYear)}`]}
                       aiDifficulty={s.aiDifficulty}
                       isSpectator={s.isSpectator}
                       formula={s.formula}
+                      gameYear={s.gameYear}
                     />
                   </NavLink>
                 ))}
@@ -197,12 +198,12 @@ export function SessionList() {
             const trackSessions = filteredSessions.filter((s) => s.track === track);
             const latestFormulaKey = trackSessions
               .map((s) => ({
-                formulaKey: getFormulaComparisonKey(s.formula),
+                formulaKey: getFormulaComparisonKey(s.formula, s.gameYear),
                 time: new Date(s.date).getTime(),
               }))
               .sort((a, b) => b.time - a.time)[0]?.formulaKey;
             const bestTime = trackSessions
-              .filter((s) => getFormulaComparisonKey(s.formula) === latestFormulaKey && s.bestLapTimeMs)
+              .filter((s) => getFormulaComparisonKey(s.formula, s.gameYear) === latestFormulaKey && s.bestLapTimeMs)
               .sort((a, b) => (a.bestLapTimeMs ?? Infinity) - (b.bestLapTimeMs ?? Infinity))[0]?.bestLapTime;
             return (
               <NavLink

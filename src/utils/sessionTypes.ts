@@ -8,6 +8,21 @@ function normalizeFormula(formula: SessionInfo["formula"] | undefined): string {
   return formula?.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ") ?? "";
 }
 
+function formatGameYearSuffix(gameYear: number | undefined): string | undefined {
+  if (!Number.isFinite(gameYear)) return undefined;
+  return String(gameYear).padStart(2, "0").slice(-2);
+}
+
+function getF1SeasonSuffix(formula: SessionInfo["formula"] | undefined, gameYear: number | undefined): string | undefined {
+  const normalized = normalizeFormula(formula);
+  if (normalized.includes("season pack")) return "26";
+
+  const explicitYear = normalized.match(/(?:^|\s)(?:f1|formula 1)\s+(?:20)?(\d{2})(?:\s|$)/)?.[1];
+  if (explicitYear) return explicitYear;
+
+  return formatGameYearSuffix(gameYear);
+}
+
 export function isRaceSessionType(type: string | undefined): boolean {
   return type?.startsWith("Race") ?? false;
 }
@@ -34,21 +49,43 @@ export function getFormulaKey(formula: SessionInfo["formula"] | undefined): stri
   return normalized.replace(/\s+/g, "-");
 }
 
-export function getFormulaComparisonKey(formula: SessionInfo["formula"] | undefined): string {
+export function getFormulaComparisonKey(formula: SessionInfo["formula"] | undefined, gameYear?: number): string {
   const formulaKey = getFormulaKey(formula);
-  if (formulaKey !== PRIMARY_FORMULA_KEY) return formulaKey;
+  if (formulaKey !== PRIMARY_FORMULA_KEY) {
+    const yearSuffix = formatGameYearSuffix(gameYear);
+    if (formulaKey === "f2" && yearSuffix) return `${formulaKey}-${yearSuffix}`;
+    return formulaKey;
+  }
 
-  const normalized = normalizeFormula(formula);
-  if (normalized.includes("26") || normalized.includes("2026") || normalized.includes("season pack")) {
+  const seasonSuffix = getF1SeasonSuffix(formula, gameYear);
+  if (seasonSuffix === "26") {
     return F1_26_COMPARISON_KEY;
   }
+  if (seasonSuffix) return `f1-${seasonSuffix}`;
 
   return DEFAULT_F1_COMPARISON_KEY;
 }
 
-export function getFormulaLabel(formula: SessionInfo["formula"] | undefined): string {
-  if (getFormulaComparisonKey(formula) === F1_26_COMPARISON_KEY) return "F1 26";
-  if (getFormulaKey(formula) === PRIMARY_FORMULA_KEY) return "F1";
+export function getFormulaComparisonAliases(formula: SessionInfo["formula"] | undefined, gameYear?: number): string[] {
+  const key = getFormulaComparisonKey(formula, gameYear);
+  const aliases = [key];
+
+  if (key === "f1-25") aliases.push(DEFAULT_F1_COMPARISON_KEY);
+  if (key === "f2-25") aliases.push("f2");
+
+  return aliases;
+}
+
+export function getFormulaLabel(formula: SessionInfo["formula"] | undefined, gameYear?: number): string {
+  const formulaKey = getFormulaKey(formula);
+  if (formulaKey === PRIMARY_FORMULA_KEY) {
+    const seasonSuffix = getF1SeasonSuffix(formula, gameYear);
+    return seasonSuffix ? `F1 ${seasonSuffix}` : "F1";
+  }
+
+  const yearSuffix = formatGameYearSuffix(gameYear);
+  if (formulaKey === "f2" && yearSuffix) return `F2 ${yearSuffix}`;
+
   return formula?.trim() || "Unknown";
 }
 
@@ -60,6 +97,6 @@ export function isNonF1Formula(formula: SessionInfo["formula"] | undefined): boo
   return !isPrimaryFormula(formula);
 }
 
-export function shouldShowFormulaLabel(formula: SessionInfo["formula"] | undefined): boolean {
-  return getFormulaComparisonKey(formula) !== DEFAULT_F1_COMPARISON_KEY;
+export function shouldShowFormulaLabel(formula: SessionInfo["formula"] | undefined, gameYear?: number): boolean {
+  return getFormulaComparisonKey(formula, gameYear) !== DEFAULT_F1_COMPARISON_KEY;
 }

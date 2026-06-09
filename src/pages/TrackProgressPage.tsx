@@ -21,7 +21,7 @@ import { msToLapTime, msToSectorTime, formatSessionType, formatTime, formatDate,
 import { TrackFlag } from "../components/TrackFlag";
 import { CompoundStatCard } from "../components/CompoundStatCard";
 import { CHART_THEME, TOOLTIP_STYLE } from "../utils/colors";
-import { getFormulaComparisonKey, getFormulaLabel, isPrimaryFormula, shouldShowFormulaLabel } from "../utils/sessionTypes";
+import { getFormulaComparisonAliases, getFormulaComparisonKey, getFormulaLabel, isPrimaryFormula, shouldShowFormulaLabel } from "../utils/sessionTypes";
 import { cardClass, cardClassCompact } from "../components/Card";
 import { Upload, ArrowLeft } from "lucide-react";
 import { CarSetupCard } from "../components/CarSetupCard";
@@ -125,39 +125,52 @@ export function TrackProgressPage() {
     [sessions, trackId],
   );
   const formulaOptions = useMemo(() => {
-    const byKey = new Map<string, { key: string; label: string; count: number; isPrimary: boolean; showLabel: boolean; latestMs: number }>();
+    const byKey = new Map<string, { key: string; label: string; aliases: Set<string>; count: number; isPrimary: boolean; showLabel: boolean; latestMs: number }>();
     for (const session of allTrackSessions) {
-      const key = getFormulaComparisonKey(session.formula);
+      const key = getFormulaComparisonKey(session.formula, session.gameYear);
       const sessionMs = new Date(session.date).getTime();
       const option = byKey.get(key);
       if (option) {
         option.count += 1;
         option.latestMs = Math.max(option.latestMs, sessionMs);
+        for (const alias of getFormulaComparisonAliases(session.formula, session.gameYear)) {
+          option.aliases.add(alias);
+        }
       } else {
         byKey.set(key, {
           key,
-          label: getFormulaLabel(session.formula),
+          label: getFormulaLabel(session.formula, session.gameYear),
+          aliases: new Set(getFormulaComparisonAliases(session.formula, session.gameYear)),
           count: 1,
           isPrimary: isPrimaryFormula(session.formula),
-          showLabel: shouldShowFormulaLabel(session.formula),
+          showLabel: shouldShowFormulaLabel(session.formula, session.gameYear),
           latestMs: sessionMs,
         });
       }
     }
-    return [...byKey.values()].sort((a, b) => {
+    return [...byKey.values()].map((option) => ({
+      ...option,
+      aliases: [...option.aliases],
+    })).sort((a, b) => {
+      const aGeneration = Number(a.key.match(/-(\d{2})$/)?.[1] ?? 0);
+      const bGeneration = Number(b.key.match(/-(\d{2})$/)?.[1] ?? 0);
+      if (aGeneration !== bGeneration) return bGeneration - aGeneration;
       if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
       if (a.latestMs !== b.latestMs) return b.latestMs - a.latestMs;
       return a.label.localeCompare(b.label);
     });
   }, [allTrackSessions]);
-  const defaultFormulaKey = formulaOptions.find((f) => f.isPrimary)?.key ?? formulaOptions[0]?.key ?? "f1";
+  const defaultFormulaKey = formulaOptions[0]?.key ?? "f1";
   const requestedFormulaKey = searchParams.get("formula");
-  const activeFormulaKey = requestedFormulaKey && formulaOptions.some((formula) => formula.key === requestedFormulaKey)
-    ? requestedFormulaKey
+  const requestedFormula = requestedFormulaKey
+    ? formulaOptions.find((formula) => formula.aliases.includes(requestedFormulaKey))
+    : undefined;
+  const activeFormulaKey = requestedFormula
+    ? requestedFormula.key
     : defaultFormulaKey;
 
   const trackSessions = allTrackSessions.filter(
-    (s) => getFormulaComparisonKey(s.formula) === activeFormulaKey,
+    (s) => getFormulaComparisonKey(s.formula, s.gameYear) === activeFormulaKey,
   );
   const trackSessionKey = trackSessions.map((s) => s.slug).join("|");
   const activeFormula = formulaOptions.find((f) => f.key === activeFormulaKey);

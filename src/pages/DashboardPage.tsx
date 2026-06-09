@@ -32,7 +32,7 @@ interface TrackGroup {
 }
 
 function trackComparisonGroupKey(summary: SessionSummary): string {
-  return `${summary.track}::${getFormulaComparisonKey(summary.formula)}`;
+  return `${summary.track}::${getFormulaComparisonKey(summary.formula, summary.gameYear)}`;
 }
 
 function trackFormulaPath(track: string, formulaKey: string): string {
@@ -68,22 +68,22 @@ export function DashboardPage() {
   const dashboardFormulaLabel = hasPrimaryFormulaStats
     ? "F1"
     : dashboardStats.length === 1
-      ? getFormulaLabel(dashboardStats[0].summary.formula)
+      ? getFormulaLabel(dashboardStats[0].summary.formula, dashboardStats[0].summary.gameYear)
       : "sim racing";
 
   // Group PB-like surfaces by track + formula generation so F1 26 does not
   // borrow best laps from older F1 regulations.
   const trackGroups: Record<string, TrackGroup> = {};
   for (const s of dashboardStats) {
-    const formulaKey = getFormulaComparisonKey(s.summary.formula);
+    const formulaKey = getFormulaComparisonKey(s.summary.formula, s.summary.gameYear);
     const key = `${s.summary.track}::${formulaKey}`;
     if (!trackGroups[key]) {
       trackGroups[key] = {
         key,
         track: s.summary.track,
         formulaKey,
-        formulaLabel: getFormulaLabel(s.summary.formula),
-        showFormula: shouldShowFormulaLabel(s.summary.formula),
+        formulaLabel: getFormulaLabel(s.summary.formula, s.summary.gameYear),
+        showFormula: shouldShowFormulaLabel(s.summary.formula, s.summary.gameYear),
         stats: [],
       };
     }
@@ -215,7 +215,7 @@ export function DashboardPage() {
                 <div className="text-xs text-zinc-500">
                   {formatSessionType(s.summary.sessionType)} ·{" "}
                   {formatDate(s.summary.date)}
-                  {shouldShowFormulaLabel(s.summary.formula) ? ` · ${getFormulaLabel(s.summary.formula)}` : ""}
+                  {shouldShowFormulaLabel(s.summary.formula, s.summary.gameYear) ? ` · ${getFormulaLabel(s.summary.formula, s.summary.gameYear)}` : ""}
                 </div>
                 {s.bestLapMs > 0 && (
                   <div className="mt-1 flex items-center gap-2">
