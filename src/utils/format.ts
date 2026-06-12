@@ -52,8 +52,18 @@ export function formatGap(ms: number): string {
   return `${sign}${(Math.abs(ms) / 1000).toFixed(3)}s`;
 }
 
-/** Format session type for display (shorter labels) */
-export function formatSessionType(type: string): string {
+/**
+ * Format session type for display (shorter labels).
+ *
+ * F2 weekends in PnG exports use `session-type: "Race"` for the Sprint and
+ * `session-type: "Race 2"` for the Feature Race. F1 never uses "Race 2", so the
+ * formula check here is the safe way to relabel without affecting F1 results.
+ */
+export function formatSessionType(type: string, formula?: string): string {
+  if (formula && /^\s*(formula\s+)?f2\b/i.test(formula)) {
+    if (type === "Race") return "Sprint";
+    if (type === "Race 2") return "Feature Race";
+  }
   switch (type) {
     case "One Shot Qualifying":
       return "One-Shot Quali";
@@ -88,6 +98,8 @@ const TRACK_COUNTRY_CODES: Record<string, string> = {
   Spain: "es",
   Barcelona: "es",
   Catalunya: "es",
+  Madrid: "es",
+  Madring: "es",
   Canada: "ca",
   Montreal: "ca",
   Austria: "at",
@@ -146,12 +158,10 @@ const TRACK_COUNTRY_CODES: Record<string, string> = {
 };
 
 /**
- * F1 2025 calendar order, using track names as they appear in telemetry
- * files (from pits-n-giggles TrackID display names).
- * Tracks not in this list sort to the end alphabetically.
+ * Calendar orders use track names as they appear in telemetry files
+ * (from pits-n-giggles TrackID display names).
  */
-const TRACK_CALENDAR_ORDER: string[] = [
-  // 2025 F1 calendar
+const F1_25_TRACK_CALENDAR_ORDER: string[] = [
   "Melbourne",
   "Shanghai",
   "Suzuka",
@@ -177,7 +187,42 @@ const TRACK_CALENDAR_ORDER: string[] = [
   "Losail",
   "Lusail",
   "Abu Dhabi",
-  // Legacy / additional circuits
+];
+
+const F1_26_TRACK_CALENDAR_ORDER: string[] = [
+  "Melbourne",
+  "Shanghai",
+  "Suzuka",
+  "Sakhir",
+  "Jeddah",
+  "Miami",
+  "Montreal",
+  "Monaco",
+  "Catalunya",
+  "Austria",
+  "Silverstone",
+  "Spa",
+  "Hungaroring",
+  "Zandvoort",
+  "Monza",
+  "Madrid",
+  "Madring",
+  "Baku",
+  "Singapore",
+  "Texas",
+  "Mexico",
+  "Brazil",
+  "Las Vegas",
+  "Losail",
+  "Lusail",
+  "Abu Dhabi",
+];
+
+const ADDITIONAL_TRACK_ORDER: string[] = [
+  // Game/DLC/non-calendar circuits
+  "Madrid",
+  "Madring",
+  "Imola",
   "Paul Ricard",
   "Hockenheim",
   "Sochi",
@@ -193,11 +238,31 @@ const TRACK_CALENDAR_ORDER: string[] = [
   "Zandvoort Reverse",
 ];
 
-/** Sort track names by F1 calendar order (unknown tracks sort to the end alphabetically) */
-export function sortTracksByCalendar(tracks: string[]): string[] {
+function getTrackCalendarOrder(formulaScopeKey?: string | null): string[] {
+  // F1 26 has a different real-world calendar than F1 25: Imola drops out
+  // and Madrid/Madring sits between Monza and Baku. Keep the older order as
+  // the fallback so legacy F1/F2 exports remain stable.
+  const officialOrder =
+    formulaScopeKey === "f1-26"
+      ? F1_26_TRACK_CALENDAR_ORDER
+      : F1_25_TRACK_CALENDAR_ORDER;
+
+  const officialTracks = new Set(officialOrder);
+  return [
+    ...officialOrder,
+    ...ADDITIONAL_TRACK_ORDER.filter((track) => !officialTracks.has(track)),
+  ];
+}
+
+/** Sort track names by calendar order (unknown tracks sort to the end alphabetically). */
+export function sortTracksByCalendar(
+  tracks: string[],
+  formulaScopeKey?: string | null,
+): string[] {
+  const trackCalendarOrder = getTrackCalendarOrder(formulaScopeKey);
   return [...tracks].sort((a, b) => {
-    const idxA = TRACK_CALENDAR_ORDER.indexOf(a);
-    const idxB = TRACK_CALENDAR_ORDER.indexOf(b);
+    const idxA = trackCalendarOrder.indexOf(a);
+    const idxB = trackCalendarOrder.indexOf(b);
     if (idxA !== -1 && idxB !== -1) return idxA - idxB;
     if (idxA !== -1) return -1;
     if (idxB !== -1) return 1;
