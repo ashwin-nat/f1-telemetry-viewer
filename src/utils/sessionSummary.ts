@@ -1,6 +1,7 @@
 import type {
   DriverData,
   FinalClassification,
+  LapHistoryEntry,
   ParticipantData,
   PlayerRaceResult,
   PlayerStintSummary,
@@ -9,8 +10,13 @@ import type {
   TelemetrySession,
   TyreStintHistoryV2Entry,
 } from "../types/telemetry";
-import { isQualifyingSessionType, isRaceSessionType } from "./sessionTypes";
+import {
+  isQualifyingSessionType,
+  isRaceSessionType,
+  isTimeTrialSessionType,
+} from "./sessionTypes";
 import { isAutoSaveFilename, parseFilename, resolveSessionMeta, toSlug } from "./parseFilename";
+import { getCleanRaceLapSamples, medianLapTimeMs } from "./stats";
 
 export interface BuiltSessionSummary {
   summary: SessionSummary & { fileSize: number };
@@ -146,6 +152,61 @@ function computeLapStats(driver: DriverData): {
   };
 }
 
+function cleanLapsByCompound(driver: DriverData): Map<string, LapHistoryEntry[]> {
+  const byCompound = new Map<string, LapHistoryEntry[]>();
+  for (const sample of getCleanRaceLapSamples(driver)) {
+    if (!sample.compound) continue;
+    const laps = byCompound.get(sample.compound) ?? [];
+    laps.push(sample.lap);
+    byCompound.set(sample.compound, laps);
+  }
+  return byCompound;
+}
+
+function compoundMatchedPaceDelta(
+  player: DriverData,
+  rival: DriverData,
+): Pick<
+  RivalEntry,
+  | "compoundMatchedPaceDeltaMs"
+  | "compoundMatchedPaceLapCount"
+  | "compoundMatchedPaceCompounds"
+> {
+  const playerByCompound = cleanLapsByCompound(player);
+  const rivalByCompound = cleanLapsByCompound(rival);
+  const compounds = [...playerByCompound.keys()].filter((compound) =>
+    rivalByCompound.has(compound),
+  );
+
+  let weightedDelta = 0;
+  let totalWeight = 0;
+  const contributingCompounds: string[] = [];
+
+  for (const compound of compounds) {
+    const playerLaps = playerByCompound.get(compound) ?? [];
+    const rivalLaps = rivalByCompound.get(compound) ?? [];
+    // One matching lap would still behave like a best-lap comparison. Requiring
+    // a small sample on both drivers keeps the dashboard pace card honest.
+    const sharedLapEvidence = Math.min(playerLaps.length, rivalLaps.length);
+    if (sharedLapEvidence < 3) continue;
+
+    const playerMedian = medianLapTimeMs(playerLaps);
+    const rivalMedian = medianLapTimeMs(rivalLaps);
+    if (playerMedian <= 0 || rivalMedian <= 0) continue;
+
+    weightedDelta += (rivalMedian - playerMedian) * sharedLapEvidence;
+    totalWeight += sharedLapEvidence;
+    contributingCompounds.push(compound);
+  }
+
+  if (totalWeight === 0) return {};
+  return {
+    compoundMatchedPaceDeltaMs: Math.round(weightedDelta / totalWeight),
+    compoundMatchedPaceLapCount: totalWeight,
+    compoundMatchedPaceCompounds: contributingCompounds,
+  };
+}
+
 function buildPositionMap(
   history: { "lap-number": number; position: number }[] | undefined,
 ): Map<number, number> {
@@ -261,6 +322,7 @@ function buildRivalsRoster(
       ? getBestLapMs(classification)
       : undefined;
     const bestLapMs = lapStats.bestLapMs ?? bestFromClassification;
+    const compoundPace = compoundMatchedPaceDelta(player, driver);
 
     roster.push({
       key,
@@ -275,6 +337,7 @@ function buildRivalsRoster(
       validLapCount: lapStats.validLapCount,
       meanLapMs: lapStats.meanLapMs,
       stddevLapMs: lapStats.stddevLapMs,
+      ...compoundPace,
       overtakes: overtakesByDriver.get(key) ?? 0,
       overtakesOnPlayer: overtakesOnPlayer.get(key) ?? 0,
       overtakesByPlayer: overtakesByPlayer.get(key) ?? 0,
@@ -366,6 +429,63 @@ function buildRaceTelemetryExtras(
   return extras;
 }
 
+interface QualifyingExtras {
+  qualifyingPosition?: number;
+  qualifyingFieldSize?: number;
+  poleLapTime?: string;
+  poleLapTimeMs?: number;
+}
+
+/**
+ * Quali-only signals for dashboard rows: where the player finished, and the
+ * pole time so a row that isn't P1 can still answer "how far off pole?".
+ * Player position comes from final-classification; pole time prefers
+ * `records.fastest.lap` (set by the game's P1) and falls back to scanning
+ * classification if records is missing on older exports.
+ */
+function buildQualifyingExtras(
+  session: TelemetrySession,
+  player: DriverData,
+): QualifyingExtras {
+  const extras: QualifyingExtras = {};
+
+  const playerPosition = player["final-classification"]?.position;
+  if (typeof playerPosition === "number" && playerPosition > 0) {
+    extras.qualifyingPosition = playerPosition;
+  }
+
+  const drivers = session["classification-data"] ?? [];
+  const classifiedDrivers = drivers.filter((d) => d["final-classification"]).length;
+  if (classifiedDrivers > 0) {
+    extras.qualifyingFieldSize = classifiedDrivers;
+  }
+
+  const fastestRecord = session.records?.fastest?.lap;
+  const recordedMs =
+    typeof fastestRecord?.time === "number" && fastestRecord.time > 0
+      ? fastestRecord.time
+      : undefined;
+  if (recordedMs && fastestRecord?.["time-str"]) {
+    extras.poleLapTime = fastestRecord["time-str"];
+    extras.poleLapTimeMs = recordedMs;
+  } else {
+    // Fallback when records.fastest.lap is missing — pick the leader's best lap.
+    const poleDriver = drivers.find(
+      (d) => d["final-classification"]?.position === 1,
+    );
+    const poleMs = poleDriver?.["final-classification"]
+      ? getBestLapMs(poleDriver["final-classification"])
+      : undefined;
+    const poleStr = poleDriver?.["final-classification"]?.["best-lap-time-str"];
+    if (poleMs && poleStr) {
+      extras.poleLapTime = poleStr;
+      extras.poleLapTimeMs = poleMs;
+    }
+  }
+
+  return extras;
+}
+
 function buildPlayerRaceResult(
   session: TelemetrySession,
   player: DriverData | undefined,
@@ -449,8 +569,36 @@ export function buildSessionSummary(
     const laps = focusDriver["session-history"]?.["lap-history-data"] ?? [];
     validLapCount = laps.filter((lap) => lap["lap-time-in-ms"] > 0).length;
 
-    if (isQualifyingSessionType(parsed.sessionType)) {
-      const bestLapNum = focusDriver["session-history"]?.["best-lap-time-lap-num"] ?? -1;
+    if (
+      isQualifyingSessionType(parsed.sessionType) ||
+      isTimeTrialSessionType(parsed.sessionType)
+    ) {
+      const recordedBestLapNum =
+        focusDriver["session-history"]?.["best-lap-time-lap-num"] ?? -1;
+      // Time Trial saves frequently report a bogus best-lap-time-lap-num
+      // (e.g. 199 against an 18-lap file) because the game tracks the PB
+      // against the ghost slot, not the session-history index. Fall back to
+      // scanning the lap history for the fastest valid lap so the dashboard
+      // pill always has a number to show.
+      let bestLapNum =
+        recordedBestLapNum > 0 && recordedBestLapNum <= laps.length
+          ? recordedBestLapNum
+          : -1;
+      if (bestLapNum < 0) {
+        let bestMs = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < laps.length; i += 1) {
+          const lap = laps[i];
+          if (
+            lap["lap-time-in-ms"] > 0 &&
+            lap["lap-valid-bit-flags"] === 15 &&
+            lap["lap-time-in-ms"] < bestMs
+          ) {
+            bestMs = lap["lap-time-in-ms"];
+            bestLapNum = i + 1;
+          }
+        }
+      }
+
       lapIndicators = laps
         .filter((lap) => lap["lap-time-in-ms"] > 0)
         .map((lap, index) => {
@@ -468,6 +616,11 @@ export function buildSessionSummary(
       }
     }
   }
+
+  const qualifyingExtras =
+    session && focusDriver && !isSpectator && isQualifyingSessionType(parsed.sessionType)
+      ? buildQualifyingExtras(session, focusDriver)
+      : {};
 
   return {
     summary: {
@@ -489,6 +642,7 @@ export function buildSessionSummary(
       weather,
       playerSetFastestLap,
       ...raceExtras,
+      ...qualifyingExtras,
       playerRaceResult: session && !isSpectator
         ? buildPlayerRaceResult(session, focusDriver, classifiedDriverCount)
         : undefined,

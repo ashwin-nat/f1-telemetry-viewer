@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Bot, Flag, SlidersHorizontal, Trophy, type LucideIcon } from "lucide-react";
+import { Bot, Flag, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { cn } from "../utils/cn";
 import { SegmentedControl } from "./ui/SegmentedControl";
+import { HStack } from "./ui/Stack";
 
 export type SessionTypeFilter = "all" | "race" | "quali";
 export type SessionModeFilter = "all" | "online" | "ai";
@@ -9,48 +11,31 @@ export type SessionModeFilter = "all" | "online" | "ai";
 export interface SessionListFilters {
   type: SessionTypeFilter;
   mode: SessionModeFilter;
-  formula: string | null;
 }
 
 export const DEFAULT_FILTERS: SessionListFilters = {
   type: "all",
   mode: "all",
-  formula: null,
 };
-
-export interface FormulaOption {
-  key: string;
-  label: string;
-}
 
 interface Props {
   value: SessionListFilters;
   onChange: (next: SessionListFilters) => void;
-  /** Formula options to show; section is hidden when fewer than 2. */
-  formulaOptions: FormulaOption[];
-  /** Resolved active formula key (after fallback to first option). */
-  activeFormulaKey: string | null;
 }
 
-/** Counts how many filter dimensions differ from defaults. Formula counts only when offered. */
-function countActive(value: SessionListFilters, formulaOptions: FormulaOption[]): number {
+function countActive(value: SessionListFilters): number {
   let n = 0;
   if (value.type !== DEFAULT_FILTERS.type) n += 1;
   if (value.mode !== DEFAULT_FILTERS.mode) n += 1;
-  // Only count formula when it's user-selectable AND differs from the first (default) option.
-  if (formulaOptions.length > 1 && value.formula && value.formula !== formulaOptions[0]?.key) {
-    n += 1;
-  }
   return n;
 }
 
-export function SessionListFilterMenu({ value, onChange, formulaOptions, activeFormulaKey }: Props) {
+export function SessionListFilterMenu({ value, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
-  const activeCount = countActive(value, formulaOptions);
-  const showFormulaSection = formulaOptions.length > 1;
+  const activeCount = countActive(value);
 
   // Close on outside click and Escape
   useEffect(() => {
@@ -85,11 +70,12 @@ export function SessionListFilterMenu({ value, onChange, formulaOptions, activeF
         onClick={() => setOpen((v) => !v)}
         aria-label="Filters"
         aria-expanded={open}
-        className={`relative flex items-center justify-center rounded-md p-1.5 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600 ${
+        className={cn(
+          "relative flex items-center justify-center rounded-md p-1.5 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600",
           open || !isDefault
             ? "bg-zinc-900 text-zinc-200"
-            : "text-zinc-500 hover:bg-zinc-900/60 hover:text-zinc-300"
-        }`}
+            : "text-zinc-500 hover:bg-zinc-900/60 hover:text-zinc-300",
+        )}
       >
         <SlidersHorizontal className="h-3.5 w-3.5" />
         {activeCount > 0 && (
@@ -131,31 +117,19 @@ export function SessionListFilterMenu({ value, onChange, formulaOptions, activeF
             />
           </Section>
 
-          {showFormulaSection && (
-            <Section label="Formula" icon={Trophy}>
-              <SegmentedControl
-                size="sm"
-                fullWidth
-                options={formulaOptions.map((f) => ({ value: f.key, label: f.label }))}
-                value={activeFormulaKey ?? formulaOptions[0]?.key ?? ""}
-                onChange={(next) => onChange({ ...value, formula: next })}
-              />
-            </Section>
-          )}
-
           {!isDefault && (
-            <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-[11px] text-zinc-500">
+            <HStack justify="between" className="px-3 py-2">
+              <span className="text-xs text-zinc-500">
                 {activeCount} {activeCount === 1 ? "filter" : "filters"} active
               </span>
               <button
                 type="button"
                 onClick={() => onChange(DEFAULT_FILTERS)}
-                className="rounded text-[11px] font-medium text-sky-400 transition-colors hover:text-sky-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600"
+                className="rounded text-xs font-medium text-sky-400 transition-colors hover:text-sky-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600"
               >
                 Reset
               </button>
-            </div>
+            </HStack>
           )}
         </div>
       )}
@@ -174,12 +148,11 @@ function Section({
 }) {
   return (
     <div className="px-3 py-2.5">
-      <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+      <HStack className="mb-1.5 gap-1.5 text-2xs font-semibold uppercase tracking-wider text-zinc-500">
         <Icon className="h-3 w-3" />
         {label}
-      </div>
+      </HStack>
       {children}
     </div>
   );
 }
-

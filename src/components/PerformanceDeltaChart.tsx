@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import type { CumulativeDelta } from "../utils/stats";
 import { CHART_THEME, TOOLTIP_STYLE } from "../utils/colors";
+import { cn } from "../utils/cn";
 
 interface PerformanceDeltaChartProps {
   deltas: CumulativeDelta[];
@@ -53,7 +54,7 @@ export function PerformanceDeltaChart({
         Performance Delta{" "}
         <span className="font-normal text-zinc-500">vs {rivalName}</span>
       </h3>
-      <p className="text-[10px] text-zinc-600 mb-2">
+      <p className="text-2xs text-zinc-600 mb-2">
         Above zero = behind {rivalName} / Below zero = ahead
       </p>
       <ResponsiveContainer width="100%" height={240}>
@@ -120,7 +121,10 @@ export function PerformanceDeltaChart({
                     )}
                   </div>
                   <div
-                    className={`font-mono font-medium ${d.delta > 0 ? "text-behind" : "text-ahead"}`}
+                    className={cn(
+                      "font-mono font-medium",
+                      d.delta > 0 ? "text-behind" : "text-ahead",
+                    )}
                   >
                     {d.delta > 0 ? "+" : ""}
                     {d.delta.toFixed(3)}s cumulative

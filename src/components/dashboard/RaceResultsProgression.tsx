@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
-import { TrackFlag } from "../TrackFlag";
 import type { SessionSummary } from "../../types/telemetry";
+import { cn } from "../../utils/cn";
 import { formatShortDate } from "../../utils/format";
-import { sessionFormulaPath } from "../../utils/routes";
-import { getFormulaComparisonKey } from "../../utils/sessionTypes";
+import { sessionSummaryPath } from "../../utils/routes";
+import { TrackFlag } from "../TrackFlag";
 import { isProblemStatus } from "./helpers";
 
 // Race-by-race progression: two bars per online race (grid → finish).
@@ -44,7 +44,7 @@ function ProgressionLegendSwatch({
 }) {
   return (
     <span className="inline-flex items-center gap-1">
-      <span className={`inline-block size-2 rounded-sm ${className}`} />
+      <span className={cn("inline-block size-2 rounded-sm", className)} />
       {label}
     </span>
   );
@@ -67,14 +67,14 @@ export function RaceResultsProgression({
     <div className="mt-6 border-t border-zinc-800/60 pt-5">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          <div className="text-xs font-mono font-semibold uppercase tracking-wider text-zinc-500">
             Race-by-race
           </div>
           <div className="mt-0.5 text-xs text-zinc-500">
             Grid (left) vs finish (right). Taller = higher up the order.
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-500">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-zinc-500">
           <ProgressionLegendSwatch className="bg-purple-500/80" label="Pole" />
           <ProgressionLegendSwatch
             className={RACE_TIER_CLASS.p1.race}
@@ -97,7 +97,7 @@ export function RaceResultsProgression({
             label="P11+"
           />
           <span className="inline-flex items-center gap-1 text-behind">
-            <span className="text-[10px] leading-none">💥</span>DNF
+            <span className="text-2xs leading-none">💥</span>DNF
           </span>
         </div>
       </div>
@@ -108,7 +108,7 @@ export function RaceResultsProgression({
         ))}
       </div>
 
-      <div className="mt-2 flex items-center justify-between text-[10px] uppercase tracking-wider text-zinc-600">
+      <div className="mt-2 flex items-center justify-between text-2xs uppercase tracking-wider text-zinc-600">
         <span>{firstDate}</span>
         <span className="text-zinc-700">first → latest</span>
         <span>{lastDate}</span>
@@ -137,12 +137,12 @@ function ProgressionBar({
   return (
     <div className="flex h-full flex-col items-center justify-end gap-0.5">
       <span
-        className={`font-mono text-[9px] leading-none tabular-nums ${labelClass}`}
+        className={cn("font-mono text-[9px] leading-none tabular-nums", labelClass)}
       >
         {label}
       </span>
       <div
-        className={`w-2 rounded-t-sm transition-all group-hover:brightness-125 ${colorClass}`}
+        className={cn("w-2 rounded-t-sm transition-all group-hover:brightness-125", colorClass)}
         style={{ height: `${heightPx}px` }}
       />
     </div>
@@ -174,10 +174,7 @@ function ProgressionColumn({ session }: { session: SessionSummary }) {
   const finishLabelClass = isDnf ? "text-behind" : "text-zinc-200";
   const gridLabel = grid ? `P${grid}` : "—";
   const title = `${session.track} · ${formatShortDate(session.date)}\nGrid ${gridLabel} → Finish ${isDnf ? "DNF" : `P${result.position}`}`;
-  const to = sessionFormulaPath(
-    session.slug,
-    getFormulaComparisonKey(session.formula, session.gameYear),
-  );
+  const to = sessionSummaryPath(session);
 
   return (
     <Link
@@ -210,7 +207,7 @@ function ProgressionColumn({ session }: { session: SessionSummary }) {
       </div>
       <TrackFlag
         track={session.track}
-        className="w-4.5! h-3! opacity-70 transition-opacity group-hover:opacity-100"
+        className="opacity-70 transition-opacity group-hover:opacity-100"
       />
     </Link>
   );

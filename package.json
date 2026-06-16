@@ -11,6 +11,8 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:telemetry": "tsx scripts/dev-with-telemetry.ts",
+    "dev:debug": "tsx scripts/dev-debug-telemetry.ts",
     "dev:prod": "vite --mode devprod",
     "build": "tsc && vite build",
     "preview": "vite preview",
@@ -32,6 +34,8 @@
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",
     "@vercel/analytics": "^1.6.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "dayjs": "^1.11.19",
     "jszip": "^3.10.1",
     "lucide-react": "^0.563.0",
@@ -39,6 +43,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.0",
-    "recharts": "^3.7.0"
+    "recharts": "^3.7.0",
+    "tailwind-merge": "^3.6.0"
   }
 }

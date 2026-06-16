@@ -1,6 +1,8 @@
-import { Eye, Globe, Timer, Target, Flag, Gauge, Save } from "lucide-react";
+import { Eye, Globe, Save } from "lucide-react";
+import { cn } from "../utils/cn";
 import { TrackFlag } from "./TrackFlag";
-import { getFormulaLabel, isRaceSessionType, shouldShowFormulaLabel } from "../utils/sessionTypes";
+import { getSessionTypeMeta } from "./sessionTypeMeta";
+import { HStack } from "./ui/Stack";
 
 interface SessionCardProps {
   sessionType: string;
@@ -10,19 +12,13 @@ interface SessionCardProps {
   bestLapTime?: string;
   isTrackBest?: boolean;
   aiDifficulty?: number;
+  isOnline?: boolean;
   isSpectator?: boolean;
-  formula?: string;
-  gameYear?: number;
   /** P&G periodic safety-net snapshot — surfaced when not deduped away. */
   isAutoSave?: boolean;
+  /** When true, the date header already shows the AI/Online context — omit it from the row. */
+  hideMode?: boolean;
 }
-
-const TYPE_CONFIG: Record<string, { color: string; icon: typeof Flag }> = {
-  Race: { color: "text-red-400/60", icon: Flag },
-  "Short Quali": { color: "text-yellow-500/60", icon: Timer },
-  "One-Shot Quali": { color: "text-purple-400/60", icon: Target },
-  "Time Trial": { color: "text-cyan-400/60", icon: Gauge },
-};
 
 const INDICATOR_COLORS = {
   valid: "bg-emerald-400",
@@ -30,75 +26,111 @@ const INDICATOR_COLORS = {
   best: "bg-purple-400",
 };
 
-export function SessionCard({ sessionType, track, time, lapIndicators, bestLapTime, isTrackBest, aiDifficulty, isSpectator, formula, gameYear, isAutoSave }: SessionCardProps) {
-  const typeConfig =
-    TYPE_CONFIG[sessionType] ??
-    (isRaceSessionType(sessionType)
-      ? TYPE_CONFIG.Race
-      : { color: "text-zinc-500", icon: Flag });
-  const TypeIcon = typeConfig.icon;
-  const showFormula = shouldShowFormulaLabel(formula, gameYear);
+export function SessionCard({
+  sessionType,
+  track,
+  time,
+  lapIndicators,
+  bestLapTime,
+  isTrackBest,
+  aiDifficulty,
+  isOnline,
+  isSpectator,
+  isAutoSave,
+  hideMode,
+}: SessionCardProps) {
+  const typeMeta = getSessionTypeMeta(sessionType);
+  const TypeIcon = typeMeta.icon;
 
   return (
     <div className="min-w-0">
-      <div className="flex items-center justify-between gap-1.5">
-        <span className="text-sm font-medium truncate flex items-center gap-1.5"><TrackFlag track={track} />{track}</span>
-        <div className="shrink-0 flex items-center gap-1.5">
-          {isSpectator && (
-            <span className="flex items-center gap-0.5 text-[10px] font-medium text-zinc-500">
-              <Eye className="size-3" />
-              Spectator
-            </span>
-          )}
+      <HStack justify="between" className="gap-1.5">
+        <HStack as="span" className="min-w-0 gap-1.5 truncate text-sm font-medium">
+          <TrackFlag track={track} />
+          <span className="truncate">{track}</span>
+        </HStack>
+        <HStack className="shrink-0 gap-1.5">
           {isAutoSave && (
             // Surviving auto-saves are ones the dedup pipeline couldn't
             // collapse against a regular save — surfacing the badge makes
             // it obvious why this row exists even when a sibling save
             // doesn't.
-            <span
-              className="flex items-center gap-0.5 text-[10px] font-medium text-amber-500/70"
+            <HStack
+              as="span"
+              className="gap-0.5 text-2xs font-medium text-amber-500/70"
               title="Pits n' Giggles periodic auto-save"
             >
               <Save className="size-3" />
               Auto-save
-            </span>
+            </HStack>
           )}
-          <span className={`flex items-center gap-0.5 text-[10px] font-medium uppercase leading-none ${typeConfig.color}`}>
+          <HStack
+            as="span"
+            className={cn("gap-0.5 text-2xs font-medium uppercase leading-none", typeMeta.color)}
+          >
             <TypeIcon className="size-3" />
             {sessionType}
-          </span>
-        </div>
-      </div>
-      <div className="flex items-center justify-between gap-1 mt-0.5">
-        <div className="flex items-center gap-1">
+          </HStack>
+        </HStack>
+      </HStack>
+      <HStack justify="between" className="mt-0.5 gap-1">
+        <HStack className="shrink-0 gap-1">
           <span className="text-xs text-zinc-500">{time}</span>
-          {aiDifficulty != null && aiDifficulty > 0 ? (
-            <span className="text-[10px] font-medium text-zinc-600">AI {aiDifficulty}</span>
-          ) : (
-            <span className="flex items-center gap-0.5 text-[10px] font-medium text-sky-500/70"><Globe className="size-3" />Online</span>
+          {!hideMode && aiDifficulty != null && aiDifficulty > 0 && (
+            <span className="text-2xs font-medium text-zinc-600">
+              AI {aiDifficulty}
+            </span>
           )}
-          {showFormula && (
-            <span className="text-[10px] font-semibold text-zinc-500">{getFormulaLabel(formula, gameYear)}</span>
+          {!hideMode && isOnline === true && (
+            <HStack
+              as="span"
+              className="gap-0.5 text-2xs font-medium text-sky-500/70"
+            >
+              <Globe className="size-3" />
+              Online
+            </HStack>
           )}
-        </div>
-        <div className="flex items-center gap-1">
+        </HStack>
+        <HStack className="min-w-0 flex-1 justify-end gap-1">
+          {isSpectator && (
+            <HStack
+              as="span"
+              className="shrink-0 gap-0.5 text-2xs font-medium text-zinc-500"
+            >
+              <Eye className="size-3" />
+              Spectator
+            </HStack>
+          )}
           {lapIndicators && lapIndicators.length > 0 && (
-            <span className="flex items-center gap-0.5">
+            // Time trials can pile up 30+ laps. Keep each dot at its full
+            // size and clip the earliest ones on the left when they don't
+            // fit, with a fade mask so the cut-off edge doesn't show a
+            // sliced half-dot.
+            <HStack
+              as="span"
+              className="min-w-0 flex-1 justify-end gap-0.5 overflow-hidden"
+              style={{
+                maskImage:
+                  "linear-gradient(to right, transparent 0, black 12px)",
+                WebkitMaskImage:
+                  "linear-gradient(to right, transparent 0, black 12px)",
+              }}
+            >
               {lapIndicators.map((indicator, i) => (
                 <span
                   key={i}
-                  className={`inline-block size-1.5 rounded-full ${INDICATOR_COLORS[indicator]}`}
+                  className={cn("inline-block size-1.5 shrink-0 rounded-full", INDICATOR_COLORS[indicator])}
                 />
               ))}
-            </span>
+            </HStack>
           )}
           {bestLapTime && (
-            <span className={`text-xs font-mono font-medium ${isTrackBest ? "text-purple-400" : "text-zinc-500"}`}>
+            <span className={cn("shrink-0 text-xs font-mono font-medium", isTrackBest ? "text-purple-400" : "text-zinc-500")}>
               {bestLapTime}
             </span>
           )}
-        </div>
-      </div>
+        </HStack>
+      </HStack>
     </div>
   );
 }

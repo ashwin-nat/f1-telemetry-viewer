@@ -1,13 +1,20 @@
 import { Bell, ChevronRight, FolderUp, Menu, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import changelog from "virtual:changelog";
 import { useTelemetry } from "../context/TelemetryContext";
+import {
+  dashboardPath,
+  replaceFormulaScopeInPath,
+  SESSIONS_ROUTE_SEGMENT,
+} from "../utils/routes";
 import { AppBrand } from "./AppBrand";
 import { BrandHomeLink } from "./BrandHomeLink";
 import { cardHighlight } from "./Card";
 import { ChangelogModal } from "./ChangelogModal";
 import { SessionList } from "./SessionList";
+import { SegmentedControl } from "./ui/SegmentedControl";
+import { cn } from "../utils/cn";
 
 const MIN_WIDTH = 250;
 const MAX_WIDTH = 480;
@@ -25,11 +32,17 @@ function getInitialWidth(): number {
 }
 
 export function Layout() {
-  const { mode, setShowUploadModal } = useTelemetry();
+  const {
+    mode,
+    setShowUploadModal,
+    formulaOptions,
+    activeFormulaKey,
+  } = useTelemetry();
   const [width, setWidth] = useState(getInitialWidth);
   const [showChangelog, setShowChangelog] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const latestHash = changelog[0]?.hash ?? "";
   const [hasUnseen, setHasUnseen] = useState(
     () =>
@@ -77,6 +90,37 @@ export function Layout() {
     document.addEventListener("mouseup", onMouseUp);
   }, []);
 
+  const handleFormulaScopeChange = useCallback(
+    (nextKey: string) => {
+      if (nextKey === activeFormulaKey) return;
+
+      const [, section] = location.pathname.split("/").filter(Boolean);
+
+      // Sessions are atomic telemetry records, not cross-scope resources. When
+      // the user changes game scope from a session detail page, send them to
+      // the selected dashboard instead of inventing a missing session URL.
+      if (section === SESSIONS_ROUTE_SEGMENT) {
+        navigate(dashboardPath(nextKey));
+        return;
+      }
+
+      if (activeFormulaKey) {
+        const nextParams = new URLSearchParams(location.search);
+        nextParams.delete("raceLaps");
+        const nextSearch = nextParams.toString();
+        navigate(
+          `${replaceFormulaScopeInPath(location.pathname, nextKey)}${
+            nextSearch ? `?${nextSearch}` : ""
+          }`,
+        );
+        return;
+      }
+
+      navigate(dashboardPath(nextKey));
+    },
+    [activeFormulaKey, location.pathname, location.search, navigate],
+  );
+
   return (
     <div className="flex h-screen overflow-hidden relative">
       {/* Mobile backdrop */}
@@ -90,13 +134,10 @@ export function Layout() {
       {/* Sidebar — faint right-edge inset highlight acts as a soft panel divider
           against the slightly lighter main canvas, without re-adding a hard border. */}
       <aside
-        className={`
-          sidebar-scroll
-          fixed inset-y-0 left-0 z-30 bg-black overflow-y-auto
-          transition-transform duration-200 ease-in-out
-          md:relative md:z-0 md:translate-x-0 md:shrink-0
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        `}
+        className={cn(
+          "sidebar-scroll fixed inset-y-0 left-0 z-30 bg-black overflow-y-auto transition-transform duration-200 ease-in-out md:relative md:z-0 md:translate-x-0 md:shrink-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+        )}
         style={{ width }}
       >
         <div className="w-px h-full absolute right-0 top-0 z-99 pointer-events-none bg-[rgba(255,255,255,0.08)]" />
@@ -131,6 +172,23 @@ export function Layout() {
               </button>
             </div>
           </div>
+          {formulaOptions.length > 1 && activeFormulaKey && (
+            <div className="mt-4">
+              <SegmentedControl
+                ariaLabel="Formula scope"
+                options={formulaOptions.map((option) => ({
+                  value: option.key,
+                  label: option.label,
+                  meta: option.sessionCount,
+                }))}
+                value={activeFormulaKey}
+                onChange={handleFormulaScopeChange}
+                size="sm"
+                fullWidth
+                scrollable
+              />
+            </div>
+          )}
         </div>
         <SessionList />
       </aside>
@@ -165,7 +223,10 @@ export function Layout() {
               solid red panel.
             */}
             <div
-              className={`relative flex items-center justify-between gap-6 overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-800/60 via-zinc-900/40 to-zinc-900/20 px-6 py-5 ${cardHighlight}`}
+              className={cn(
+                "relative flex items-center justify-between gap-6 overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-800/60 via-zinc-900/40 to-zinc-900/20 px-6 py-5",
+                cardHighlight,
+              )}
             >
               <div
                 aria-hidden

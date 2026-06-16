@@ -11,10 +11,12 @@ import {
   ComposedChart,
 } from "recharts";
 import type { LapHistoryEntry, PerLapInfo, TyreStint } from "../types/telemetry";
-import { msToLapTime, isLapValid } from "../utils/format";
+import { msToLapTime, msToSectorTime, isLapValid, sectorTimeMs } from "../utils/format";
 import { ersDeployMjForLap, ersHarvestMjForLap, getWorstWheelWear } from "../utils/stats";
-import { tableRowClass } from "./ui/table";
+import { Badge } from "./ui/Badge";
+import { tableHeadClass, tableRowClass } from "./ui/table";
 import { CHART_THEME, TOOLTIP_STYLE, COMPOUND_COLORS, SC_COLORS, SC_FALLBACK } from "../utils/colors";
+import { cn } from "../utils/cn";
 
 interface LapTimeChartProps {
   laps: LapHistoryEntry[];
@@ -59,6 +61,41 @@ export function LapTimeChart({
     }
   }
 
+  // Per-lap fuel burn (kg) = prev lap's tank − this lap's tank. First lap has
+  // no prior reading, so it stays absent. We also track the green-flag median
+  // to classify each lap as push (above) vs. saving (below) in the table.
+  const fuelBurnMap = new Map<number, number>();
+  const greenFlagBurns: number[] = [];
+  if (perLapInfo && perLapInfo.length >= 2) {
+    const sortedFuel = [...perLapInfo]
+      .filter((l) => l["car-status-data"]?.["fuel-in-tank"] > 0)
+      .sort((a, b) => a["lap-number"] - b["lap-number"]);
+    for (let i = 1; i < sortedFuel.length; i++) {
+      const prev = sortedFuel[i - 1]!;
+      const curr = sortedFuel[i]!;
+      const burn =
+        prev["car-status-data"]["fuel-in-tank"] -
+        curr["car-status-data"]["fuel-in-tank"];
+      // Refuel-style negatives can show up in glitched/aborted sessions —
+      // ignore them rather than render a misleading "saving" lap.
+      if (burn <= 0) continue;
+      fuelBurnMap.set(curr["lap-number"], burn);
+      const prevGreen =
+        (prev["max-safety-car-status"] ?? "NO_SAFETY_CAR") === "NO_SAFETY_CAR";
+      const currGreen =
+        (curr["max-safety-car-status"] ?? "NO_SAFETY_CAR") === "NO_SAFETY_CAR";
+      if (prevGreen && currGreen) greenFlagBurns.push(burn);
+    }
+  }
+  const medianGreenBurn = (() => {
+    if (!greenFlagBurns.length) return undefined;
+    const sorted = [...greenFlagBurns].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? (sorted[mid - 1]! + sorted[mid]!) / 2
+      : sorted[mid]!;
+  })();
+
   // Build rival lookup by lap number
   const rivalMap = new Map<number, number>();
   if (rivalLaps) {
@@ -86,9 +123,9 @@ export function LapTimeChart({
         timeStr: l["lap-time-str"],
         timeSec: l["lap-time-in-ms"] / 1000,
         valid: isLapValid(l["lap-valid-bit-flags"]),
-        s1: l["sector-1-time-in-ms"] / 1000,
-        s2: l["sector-2-time-in-ms"] / 1000,
-        s3: l["sector-3-time-in-ms"] / 1000,
+        s1: sectorTimeMs(l, 1) / 1000,
+        s2: sectorTimeMs(l, 2) / 1000,
+        s3: sectorTimeMs(l, 3) / 1000,
         topSpeed: info?.["top-speed-kmph"] ?? undefined,
         rivalTimeSec: rivalMap.get(lapNum) ?? undefined,
         scStatus,
@@ -96,6 +133,7 @@ export function LapTimeChart({
         isVSC: scStatus === "VIRTUAL_SAFETY_CAR",
         ersMj,
         ersHarvMj,
+        fuelKg: fuelBurnMap.get(lapNum) ?? undefined,
       };
     });
 
@@ -119,6 +157,7 @@ export function LapTimeChart({
         ...data.filter((d) => d.ersHarvMj != null).map((d) => d.ersHarvMj!),
       )
     : 0;
+  const hasFuel = data.some((d) => d.fuelKg != null);
   const hasTopSpeed = data.some((d) => d.topSpeed != null);
   const bestTopSpeed = hasTopSpeed
     ? Math.max(...data.filter((d) => d.valid && d.topSpeed != null).map((d) => d.topSpeed!))
@@ -153,7 +192,7 @@ export function LapTimeChart({
       <div className="flex items-center gap-3 mb-2">
         <h3 className="text-sm font-semibold text-zinc-300">Lap Times</h3>
         {scRanges.length > 0 && (
-          <div className="flex items-center gap-3 text-[10px] text-zinc-400">
+          <div className="flex items-center gap-3 text-2xs text-zinc-400">
             {scRanges.some((r) => r.status === "SAFETY_CAR" || r.status === "FULL_SAFETY_CAR") && (
               <span className="flex items-center gap-1">
                 <span className="inline-block w-3 h-2.5 rounded-sm bg-amber-500/25 border border-amber-500/40" />
@@ -253,7 +292,13 @@ export function LapTimeChart({
               stroke={CHART_THEME.best}
               strokeDasharray="4 4"
               strokeOpacity={0.5}
-              label={{ value: `Best: ${msToLapTime(bestTime * 1000)}`, fill: CHART_THEME.best, fontSize: 10, position: "right" }}
+              label={{
+                value: `Best: ${msToLapTime(bestTime * 1000)}`,
+                fill: CHART_THEME.best,
+                fontSize: 10,
+                position: "insideRight",
+                offset: 8,
+              }}
             />
           )}
 
@@ -372,7 +417,7 @@ export function LapTimeChart({
       <div className="mt-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
         {(() => {
           const hasWear = stints?.some((s) => s["tyre-wear-history"]?.length > 0) ?? false;
-          // Build wear lookup: lap number → average wear %
+          // Build wear lookup: lap number → max/worst-wheel wear %
           // Each stint's wear history starts with the pit-lap at 0% (fresh tyres),
           // which would overwrite the previous stint's final wear. Keep the higher
           // value so pit laps show the outgoing tyre wear, not the incoming 0%.
@@ -389,7 +434,7 @@ export function LapTimeChart({
             }
           }
 
-          const colCount = 5 + (hasTopSpeed ? 1 : 0) + (hasErs ? 1 : 0) + (hasErsHarv ? 1 : 0) + (hasWear ? 1 : 0);
+          const colCount = 5 + (hasTopSpeed ? 1 : 0) + (hasErs ? 1 : 0) + (hasErsHarv ? 1 : 0) + (hasWear ? 1 : 0) + (hasFuel ? 1 : 0);
           const headerRow = (
             <tr>
               <th className="text-left py-1 px-2">Lap</th>
@@ -398,9 +443,24 @@ export function LapTimeChart({
               <th className="text-right py-1 px-2">S2</th>
               <th className="text-right py-1 px-2">S3</th>
               {hasTopSpeed && <th className="text-right py-1 px-2">Speed</th>}
-              {hasWear && <th className="text-right py-1 px-2">Wear</th>}
+              {hasWear && (
+                <th
+                  className="text-right py-1 px-2"
+                  title="Max tyre wear: highest-worn tyre at the end of the lap."
+                >
+                  Max wear
+                </th>
+              )}
               {hasErs && <th className="text-right py-1 px-2">ERS Dep</th>}
               {hasErsHarv && <th className="text-right py-1 px-2">ERS Harv</th>}
+              {hasFuel && (
+                <th
+                  className="text-right py-1 px-2"
+                  title="Fuel burned this lap (kg). Push laps trend higher than the green-flag median; saving laps trend lower."
+                >
+                  Fuel (kg)
+                </th>
+              )}
             </tr>
           );
 
@@ -418,39 +478,47 @@ export function LapTimeChart({
             return (
               <tr
                 key={rowKey}
-                className={`${tableRowClass} ${!d.valid ? "bg-red-500/10" : scBg}`}
+                className={cn(tableRowClass, !d.valid ? "bg-red-500/10" : scBg)}
               >
-                <td className="py-1 px-2">
+                <td className="py-1 px-2 font-mono">
                   {d.lap}
                   {!d.valid && (
-                    <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-behind">
+                    // text-behind is the app-wide "you're behind" red, not a
+                    // generic chip tone — keep the override here.
+                    <Badge size="xs" shape="square" className="ml-1.5 bg-red-500/20 text-behind">
                       INVALID
-                    </span>
+                    </Badge>
                   )}
                   {d.isSC && (
-                    <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400">
+                    <Badge size="xs" shape="square" tone="amber" className="ml-1.5">
                       SC
-                    </span>
+                    </Badge>
                   )}
                   {d.isVSC && (
-                    <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold bg-yellow-500/20 text-yellow-400">
+                    <Badge size="xs" shape="square" tone="yellow" className="ml-1.5">
                       VSC
-                    </span>
+                    </Badge>
                   )}
                 </td>
-                <td className={`text-right py-1 px-2 font-mono ${!d.valid ? "text-behind/70 line-through" : isBestLap ? "text-best font-semibold" : ""}`}>
+                <td className={cn("text-right py-1 px-2 font-mono", !d.valid ? "text-behind/70 line-through" : isBestLap ? "text-best font-semibold" : "")}>
                   {d.timeStr}
                 </td>
-                <td className={`text-right py-1 px-2 font-mono ${!d.valid ? "text-zinc-600" : isBestS1 ? "text-best" : ""}`}>{d.s1.toFixed(3)}</td>
-                <td className={`text-right py-1 px-2 font-mono ${!d.valid ? "text-zinc-600" : isBestS2 ? "text-best" : ""}`}>{d.s2.toFixed(3)}</td>
-                <td className={`text-right py-1 px-2 font-mono ${!d.valid ? "text-zinc-600" : isBestS3 ? "text-best" : ""}`}>{d.s3.toFixed(3)}</td>
+                <td className={cn("text-right py-1 px-2 font-mono", !d.valid ? "text-zinc-600" : isBestS1 ? "text-best" : "")}>{msToSectorTime(d.s1 * 1000)}</td>
+                <td className={cn("text-right py-1 px-2 font-mono", !d.valid ? "text-zinc-600" : isBestS2 ? "text-best" : "")}>{msToSectorTime(d.s2 * 1000)}</td>
+                <td className={cn("text-right py-1 px-2 font-mono", !d.valid ? "text-zinc-600" : isBestS3 ? "text-best" : "")}>{msToSectorTime(d.s3 * 1000)}</td>
                 {hasTopSpeed && (
-                  <td className={`text-right py-1 px-2 font-mono ${d.valid && d.topSpeed != null && d.topSpeed === bestTopSpeed ? "text-best font-semibold" : ""}`}>
+                  <td className={cn("text-right py-1 px-2 font-mono", d.valid && d.topSpeed != null && d.topSpeed === bestTopSpeed ? "text-best font-semibold" : "")}>
                     {d.topSpeed != null ? `${d.topSpeed}` : "–"}
                   </td>
                 )}
                 {hasWear && (
-                  <td className={`text-right py-1 px-2 font-mono ${wear != null && wear >= 75 ? "text-behind" : wear != null && wear >= 50 ? "text-warning" : "text-zinc-400"}`}>
+                  <td
+                    className={cn(
+                      "text-right py-1 px-2 font-mono",
+                      wear != null && wear >= 75 ? "text-behind" : wear != null && wear >= 50 ? "text-warning" : "text-zinc-400",
+                    )}
+                    title={wear != null ? "Max tyre wear: highest-worn tyre at the end of this lap." : undefined}
+                  >
                     {wear != null ? `${wear.toFixed(0)}%` : "–"}
                   </td>
                 )}
@@ -464,6 +532,23 @@ export function LapTimeChart({
                     {d.ersHarvMj != null && d.ersHarvMj > 0 ? d.ersHarvMj.toFixed(1) : "–"}
                   </td>
                 )}
+                {hasFuel && (
+                  <td
+                    className={cn(
+                      "text-right py-1 px-2 font-mono",
+                      d.fuelKg == null
+                        ? "text-zinc-600"
+                        : medianGreenBurn != null && d.fuelKg < medianGreenBurn * 0.95
+                          ? "text-ahead"
+                          : medianGreenBurn != null && d.fuelKg > medianGreenBurn * 1.05
+                            ? "text-warning"
+                            : "text-zinc-400",
+                    )}
+                    title={d.fuelKg != null ? "Fuel burned this lap (kg)." : undefined}
+                  >
+                    {d.fuelKg != null ? d.fuelKg.toFixed(2) : "–"}
+                  </td>
+                )}
               </tr>
             );
           };
@@ -472,7 +557,7 @@ export function LapTimeChart({
           if (stints && stints.length > 0) {
             return (
               <table className="w-full text-xs min-w-[500px]">
-                <thead className="text-zinc-500">
+                <thead className={tableHeadClass}>
                   {headerRow}
                 </thead>
                 <tbody>
@@ -484,16 +569,16 @@ export function LapTimeChart({
                     );
                     return [
                       <tr key={`stint-${si}`}>
-                        <td colSpan={colCount} className={`py-1.5 px-2 ${si > 0 ? "pt-4" : ""}`}>
+                        <td colSpan={colCount} className={cn("py-1.5 px-2", si > 0 && "pt-4")}>
                           <div className="flex items-center gap-2">
                             <span
                               className="inline-block w-2.5 h-2.5 rounded-full"
                               style={{ backgroundColor: color }}
                             />
-                            <span className="text-[11px] font-semibold text-zinc-300">
+                            <span className="text-xs font-semibold text-zinc-300">
                               Stint {si + 1} — {compound}
                             </span>
-                            <span className="text-[10px] text-zinc-500">
+                            <span className="text-2xs text-zinc-500">
                               Laps {stint["start-lap"]}–{stint["end-lap"]} ({stint["stint-length"]} laps)
                             </span>
                           </div>
@@ -510,7 +595,7 @@ export function LapTimeChart({
           // Fallback: no stint grouping
           return (
             <table className="w-full text-xs min-w-[500px]">
-              <thead className="text-zinc-500">
+              <thead className={tableHeadClass}>
                 {headerRow}
               </thead>
               <tbody>

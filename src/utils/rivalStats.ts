@@ -62,6 +62,14 @@ interface RivalAggregate {
    * median still favors recent form.
    */
   bestLapDeltas: { deltaMs: number; weight: number }[];
+  /**
+   * Per-race samples of same-compound clean median pace deltas. Preferred over
+   * best-lap deltas for pace cards because it compares representative race pace
+   * on tyres both drivers actually used.
+   */
+  compoundPaceDeltas: { deltaMs: number; weight: number }[];
+  compoundPaceRaceSamples: number;
+  compoundPaceLapSamples: number;
   /** Sum of rival lap stddev ms across races where they had ≥5 valid laps. */
   stddevSumMs: number;
   stddevSamples: number;
@@ -120,6 +128,14 @@ const MIN_SHARED_RACES = 2;
 const MIN_PACE_RACES = 2;
 const MIN_VALID_LAPS_PER_RIVAL_RACE = 5;
 const MIN_POSITION_GAP_SAMPLES = 10;
+/**
+ * Higher floor for "X King"-style superlatives (overtake king, most consistent).
+ * These are averages, so 2 races is too few to be credible — one DNF or one
+ * outlier lap can flip the leaderboard. Three races is the minimum we'll trust
+ * to call someone the best at anything. Cards without ≥3 qualifying races stay
+ * hidden, which keeps the dashboard honest when a formula scope is brand new.
+ */
+const MIN_SUPERLATIVE_RACES = 3;
 /**
  * Higher races floor applied ONLY to non-human entries (constructor-slot
  * placeholders like "Mercedes #66" and AI-filled lobby seats). A two-race
@@ -245,6 +261,9 @@ function newAggregate(rival: { key: string; name: string; team?: string }, fallb
     teammateRaces: 0,
     weightedTeammateRaces: 0,
     bestLapDeltas: [],
+    compoundPaceDeltas: [],
+    compoundPaceRaceSamples: 0,
+    compoundPaceLapSamples: 0,
     stddevSumMs: 0,
     stddevSamples: 0,
     weightedStddevSumMs: 0,
@@ -311,7 +330,26 @@ function aggregateRivals(sessions: SessionSummary[]): Map<string, RivalAggregate
           weight,
         });
       }
+      if (rival.compoundMatchedPaceDeltaMs != null) {
+        existing.compoundPaceDeltas.push({
+          deltaMs: rival.compoundMatchedPaceDeltaMs,
+          weight,
+        });
+        existing.compoundPaceRaceSamples += 1;
+        existing.compoundPaceLapSamples +=
+          rival.compoundMatchedPaceLapCount ?? 0;
+      }
+      // DNFs distort both consistency and overtake-rate averages: a rival
+      // who retires after 5 laps might still have ridden a clean stint
+      // (artificially low stddev) or made a flurry of lap-1 swaps before
+      // bowing out (artificially high overtake count). Either way, the race
+      // isn't a fair sample of their season-long skill, so we keep it in
+      // `races` (the bonding "they showed up" counter) but drop it from the
+      // superlative inputs. The dnf-king card uses `dnfs` directly, so it
+      // still surfaces this race separately.
+      const isFairSample = !isDnfStatus(rival.status);
       if (
+        isFairSample &&
         rival.stddevLapMs != null &&
         rival.validLapCount >= MIN_VALID_LAPS_PER_RIVAL_RACE
       ) {
@@ -320,10 +358,12 @@ function aggregateRivals(sessions: SessionSummary[]): Map<string, RivalAggregate
         existing.weightedStddevSumMs += rival.stddevLapMs * weight;
         existing.weightedStddevWeight += weight;
       }
-      existing.totalOvertakes += rival.overtakes;
-      existing.overtakeRaceSamples += 1;
-      existing.weightedOvertakes += rival.overtakes * weight;
-      existing.weightedOvertakeRaceWeight += weight;
+      if (isFairSample) {
+        existing.totalOvertakes += rival.overtakes;
+        existing.overtakeRaceSamples += 1;
+        existing.weightedOvertakes += rival.overtakes * weight;
+        existing.weightedOvertakeRaceWeight += weight;
+      }
       if (rival.avgPositionGap != null && rival.positionGapSamples != null) {
         existing.positionGapSum += rival.avgPositionGap;
         existing.positionGapSamples += 1;
@@ -394,6 +434,47 @@ function bestLapMedianMs(aggregate: RivalAggregate): number | undefined {
   );
 }
 
+interface PaceMedian {
+  deltaMs: number;
+  raceSamples: number;
+  lapSamples?: number;
+  basis: "same-compound pace" | "best-lap fallback";
+}
+
+function compoundPaceMedianMs(aggregate: RivalAggregate): number | undefined {
+  return weightedMedian(
+    aggregate.compoundPaceDeltas.map((s) => ({
+      value: s.deltaMs,
+      weight: s.weight,
+    })),
+  );
+}
+
+function preferredPaceMedian(aggregate: RivalAggregate): PaceMedian | undefined {
+  const compoundMedian = compoundPaceMedianMs(aggregate);
+  if (
+    compoundMedian != null &&
+    aggregate.compoundPaceRaceSamples >= MIN_PACE_RACES
+  ) {
+    return {
+      deltaMs: compoundMedian,
+      raceSamples: aggregate.compoundPaceRaceSamples,
+      lapSamples: aggregate.compoundPaceLapSamples,
+      basis: "same-compound pace",
+    };
+  }
+
+  const bestLapMedian = bestLapMedianMs(aggregate);
+  if (bestLapMedian == null || aggregate.bestLapDeltas.length < MIN_PACE_RACES) {
+    return undefined;
+  }
+  return {
+    deltaMs: bestLapMedian,
+    raceSamples: aggregate.bestLapDeltas.length,
+    basis: "best-lap fallback",
+  };
+}
+
 function formatDeltaSeconds(ms: number): string {
   const sign = ms > 0 ? "+" : ms < 0 ? "−" : "";
   const seconds = Math.abs(ms) / 1000;
@@ -425,10 +506,10 @@ function buildClosestTeammateCards(aggregates: RivalAggregate[]): RivalCard[] {
     return b.teammateRaces - a.teammateRaces;
   });
   return top.map((winner) => {
-    const medianDeltaMs = bestLapMedianMs(winner);
+    const paceMedian = preferredPaceMedian(winner);
     const headline =
-      medianDeltaMs != null
-        ? formatDeltaSeconds(medianDeltaMs)
+      paceMedian != null
+        ? formatDeltaSeconds(paceMedian.deltaMs)
         : `${winner.teammateRaces}×`;
     const detailParts: string[] = [`${winner.teammateRaces} races`];
     if (winner.h2hWinsForPlayer + winner.h2hWinsForRival > 0) {
@@ -436,7 +517,7 @@ function buildClosestTeammateCards(aggregates: RivalAggregate[]): RivalCard[] {
         `H2H ${winner.h2hWinsForPlayer}-${winner.h2hWinsForRival}`,
       );
     }
-    const relation = medianDeltaMs != null ? relationToYou(medianDeltaMs) : undefined;
+    const relation = paceMedian != null ? relationToYou(paceMedian.deltaMs) : undefined;
     if (relation) detailParts.push(relation);
     return {
       kind: "closest-teammate",
@@ -467,13 +548,14 @@ function buildFrequentRivalCards(aggregates: RivalAggregate[]): RivalCard[] {
   });
   return top.map((winner) => {
     const opponentRaces = winner.races - winner.teammateRaces;
-    const medianDeltaMs = bestLapMedianMs(winner);
+    const paceMedian = preferredPaceMedian(winner);
     // Use the magnitude + a direction word in the footer ("0.052s faster
-     // than you") so the slim format reads in plain English — no sign
-     // convention to mentally translate.
+    // than you") so the slim format reads in plain English — no sign
+    // convention to mentally translate.
+    const relation = paceMedian != null ? relationToYou(paceMedian.deltaMs) : undefined;
     const gapPhrase =
-      medianDeltaMs != null
-        ? `${(Math.abs(medianDeltaMs) / 1000).toFixed(3)}s ${relationToYou(medianDeltaMs)}`
+      paceMedian != null && relation
+        ? `${(Math.abs(paceMedian.deltaMs) / 1000).toFixed(3)}s ${relation}`
         : undefined;
     const detail = [
       `${winner.races} races`,
@@ -496,28 +578,38 @@ function buildFrequentRivalCards(aggregates: RivalAggregate[]): RivalCard[] {
 function buildPaceBenchmarkCards(aggregates: RivalAggregate[]): RivalCard[] {
   // Annotate each candidate with its weighted-median delta once so we don't
   // recompute it inside the filter + sort + map (median is O(n log n) per call).
-  type Annotated = RivalAggregate & { medianDeltaMs: number };
+  type Annotated = RivalAggregate & { paceMedian: PaceMedian };
   const annotated = aggregates.flatMap<Annotated>((r) => {
-    if (r.bestLapDeltas.length < MIN_PACE_RACES) return [];
     if (r.races - r.teammateRaces < 1) return [];
     if (r.weightedRaces < MIN_RECENCY_SCORE) return [];
-    const medianDeltaMs = bestLapMedianMs(r);
-    if (medianDeltaMs == null || medianDeltaMs >= 0) return [];
-    return [{ ...r, medianDeltaMs }];
+    const paceMedian = preferredPaceMedian(r);
+    if (paceMedian == null || paceMedian.deltaMs >= 0) return [];
+    return [{ ...r, paceMedian }];
   });
   const top = takeTop(annotated, MAX_PER_KIND["pace-benchmark"], (a, b) => {
     const ph = placeholderRank(a) - placeholderRank(b);
     if (ph !== 0) return ph;
-    return a.medianDeltaMs - b.medianDeltaMs;
+    return a.paceMedian.deltaMs - b.paceMedian.deltaMs;
   });
-  return top.map((winner) => ({
-    kind: "pace-benchmark",
-    driverName: winner.name,
-    team: winner.latestTeam ?? winner.team,
-    headline: formatDeltaSeconds(winner.medianDeltaMs),
-    detail: `${winner.bestLapDeltas.length} races · faster than you`,
-    sampleSize: winner.bestLapDeltas.length,
-  }));
+  return top.map((winner) => {
+    const evidence =
+      winner.paceMedian.basis === "same-compound pace" &&
+      winner.paceMedian.lapSamples
+        ? `${winner.paceMedian.raceSamples} races · ${winner.paceMedian.lapSamples} laps · same tyres`
+        : `${winner.paceMedian.raceSamples} races`;
+    const basis =
+      winner.paceMedian.basis === "same-compound pace"
+        ? ""
+        : ` · ${winner.paceMedian.basis}`;
+    return {
+      kind: "pace-benchmark",
+      driverName: winner.name,
+      team: winner.latestTeam ?? winner.team,
+      headline: formatDeltaSeconds(winner.paceMedian.deltaMs),
+      detail: `${evidence}${basis}`,
+      sampleSize: winner.paceMedian.raceSamples,
+    };
+  });
 }
 
 function buildMostConsistentRivalCards(
@@ -525,7 +617,7 @@ function buildMostConsistentRivalCards(
 ): RivalCard[] {
   const candidates = aggregates.filter(
     (r) =>
-      r.stddevSamples >= MIN_PACE_RACES &&
+      r.stddevSamples >= MIN_SUPERLATIVE_RACES &&
       r.weightedRaces >= MIN_RECENCY_SCORE &&
       r.weightedStddevWeight > 0,
   );
@@ -557,7 +649,7 @@ function buildMostConsistentRivalCards(
 function buildOvertakeKingCards(aggregates: RivalAggregate[]): RivalCard[] {
   const candidates = aggregates.filter(
     (r) =>
-      r.overtakeRaceSamples >= MIN_SHARED_RACES &&
+      r.overtakeRaceSamples >= MIN_SUPERLATIVE_RACES &&
       r.totalOvertakes >= 3 &&
       r.weightedOvertakeRaceWeight > 0,
   );
@@ -571,11 +663,16 @@ function buildOvertakeKingCards(aggregates: RivalAggregate[]): RivalCard[] {
   });
   return top.map((winner) => {
     const avgPerRace = winner.totalOvertakes / winner.overtakeRaceSamples;
+    // Whole numbers come out as e.g. "12", not "12.0" — the trailing zero
+    // reads as false precision when totals divide evenly.
+    const headline = Number.isInteger(avgPerRace)
+      ? `${avgPerRace}`
+      : avgPerRace.toFixed(1);
     return {
       kind: "overtake-king",
       driverName: winner.name,
       team: winner.latestTeam ?? winner.team,
-      headline: avgPerRace.toFixed(1),
+      headline,
       detail: `avg overtakes · ${winner.totalOvertakes} total in ${winner.overtakeRaceSamples} races`,
       sampleSize: winner.overtakeRaceSamples,
     };
@@ -721,6 +818,164 @@ const RIVAL_CARD_ORDER: RivalCardKind[] = [
   "penalty-magnet",
   "most-consistent-rival",
 ];
+
+/**
+ * Single-track sibling of {@link buildRivalStats}: the fastest online rival
+ * the player has faced at this specific track in the active formula scope.
+ *
+ * Sample sizes are tiny at a single track, so the function ranks by an
+ * unweighted mean pace gap (compound-matched clean laps where available,
+ * best-lap fallback otherwise) and exposes the evidence count on the result
+ * so the UI can render it honestly. Recency weighting from
+ * {@link buildRivalStats} is deliberately dropped — at single-track scope
+ * "who's fastest" beats "who's hot lately".
+ *
+ * Filters mirror the dashboard's rivals scope: online race sessions only,
+ * AI-fill lobby slots dropped (real F1/F2 surnames the game inserts for empty
+ * seats), constructor-slot placeholders dropped, and rivals with fewer than
+ * {@link MIN_TRACK_RIVAL_LAPS_PER_RACE} valid laps in a race are ignored so a
+ * one-lap retirement can't masquerade as race pace.
+ */
+export interface TrackRivalBenchmark {
+  driverName: string;
+  team?: string;
+  /** Pace delta vs player (ms). Negative = rival was faster than the player. */
+  paceDeltaMs: number;
+  /** Which sample stream produced `paceDeltaMs`. */
+  basis: "same-compound pace" | "best-lap fallback";
+  /** Online races at this track shared with the rival. */
+  raceCount: number;
+  /**
+   * Total clean laps that contributed to the same-compound pace mean.
+   * Undefined for the best-lap fallback (one sample per race).
+   */
+  lapSamples?: number;
+}
+
+/**
+ * Each rival must have run at least this many valid laps in a race for that
+ * race to count toward the track benchmark. Three laps is enough to wash out
+ * a single-lap fluke (in/out lap, slipstream tow) while still admitting short
+ * races and lapped finishers — the harder thresholds belong on
+ * `compoundMatchedPaceDeltaMs` which already gates on shared clean laps.
+ */
+const MIN_TRACK_RIVAL_LAPS_PER_RACE = 3;
+
+export function buildTrackRivalBenchmark(
+  sessions: SessionSummary[],
+  formulaKey: string | undefined,
+  scopeKeyFor: (session: SessionSummary) => string,
+  trackMatcher: (session: SessionSummary) => boolean,
+): TrackRivalBenchmark | null {
+  const scoped = getOnlineRaceSessions(sessions, formulaKey, scopeKeyFor).filter(
+    trackMatcher,
+  );
+  if (scoped.length === 0) return null;
+
+  interface Bench {
+    name: string;
+    team?: string;
+    races: number;
+    aiRaces: number;
+    compoundDeltaSum: number;
+    compoundLapSum: number;
+    compoundRaceSamples: number;
+    bestLapDeltaSum: number;
+    bestLapRaceSamples: number;
+    latestTeam?: string;
+  }
+  const map = new Map<string, Bench>();
+
+  for (const session of scoped) {
+    const playerBest = getPlayerBestLapMs(session);
+    for (const rival of session.rivals ?? []) {
+      if (rival.validLapCount < MIN_TRACK_RIVAL_LAPS_PER_RACE) continue;
+      const existing =
+        map.get(rival.key) ??
+        ({
+          name: rival.name,
+          team: rival.team,
+          races: 0,
+          aiRaces: 0,
+          compoundDeltaSum: 0,
+          compoundLapSum: 0,
+          compoundRaceSamples: 0,
+          bestLapDeltaSum: 0,
+          bestLapRaceSamples: 0,
+        } satisfies Bench);
+      existing.races += 1;
+      if (rival.isAi === true) existing.aiRaces += 1;
+      if (rival.compoundMatchedPaceDeltaMs != null) {
+        existing.compoundDeltaSum += rival.compoundMatchedPaceDeltaMs;
+        existing.compoundLapSum += rival.compoundMatchedPaceLapCount ?? 0;
+        existing.compoundRaceSamples += 1;
+      }
+      if (rival.bestLapMs != null && playerBest != null) {
+        existing.bestLapDeltaSum += rival.bestLapMs - playerBest;
+        existing.bestLapRaceSamples += 1;
+      }
+      // Team can change between sessions; prefer the most recent value but
+      // don't bother with a per-session timestamp here — just keep updating.
+      if (rival.team) existing.latestTeam = rival.team;
+      map.set(rival.key, existing);
+    }
+  }
+
+  interface Candidate {
+    name: string;
+    team?: string;
+    deltaMs: number;
+    basis: "same-compound pace" | "best-lap fallback";
+    raceCount: number;
+    lapSamples?: number;
+  }
+  const candidates: Candidate[] = [];
+  for (const bench of map.values()) {
+    // Drop AI-majority entries and constructor-slot placeholders — same
+    // reasoning as `buildRivalStats`, just without the high-water threshold
+    // because single-track samples are too small for it to be meaningful.
+    if (bench.races > 0 && bench.aiRaces * 2 >= bench.races) continue;
+    if (isConstructorPlaceholder(bench.name)) continue;
+
+    let deltaMs: number;
+    let basis: "same-compound pace" | "best-lap fallback";
+    let lapSamples: number | undefined;
+    if (bench.compoundRaceSamples > 0) {
+      deltaMs = bench.compoundDeltaSum / bench.compoundRaceSamples;
+      basis = "same-compound pace";
+      lapSamples = bench.compoundLapSum;
+    } else if (bench.bestLapRaceSamples > 0) {
+      deltaMs = bench.bestLapDeltaSum / bench.bestLapRaceSamples;
+      basis = "best-lap fallback";
+    } else {
+      continue;
+    }
+    candidates.push({
+      name: bench.name,
+      team: bench.latestTeam ?? bench.team,
+      deltaMs,
+      basis,
+      raceCount: bench.races,
+      lapSamples,
+    });
+  }
+  if (candidates.length === 0) return null;
+
+  // Fastest = most negative delta. Tie-break by larger race count.
+  candidates.sort((a, b) => {
+    if (a.deltaMs !== b.deltaMs) return a.deltaMs - b.deltaMs;
+    return b.raceCount - a.raceCount;
+  });
+  const winner = candidates[0];
+  return {
+    driverName: winner.name,
+    team: winner.team,
+    paceDeltaMs: winner.deltaMs,
+    basis: winner.basis,
+    raceCount: winner.raceCount,
+    lapSamples: winner.lapSamples,
+  };
+}
 
 export function buildRivalStats(
   sessions: SessionSummary[],

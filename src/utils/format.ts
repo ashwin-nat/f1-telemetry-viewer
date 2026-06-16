@@ -1,3 +1,5 @@
+import type { LapHistoryEntry } from "../types/telemetry";
+
 /** Convert milliseconds to lap time string (e.g. 84903 -> "1:24.903") */
 export function msToLapTime(ms: number): string {
   if (ms <= 0) return "-";
@@ -9,7 +11,46 @@ export function msToLapTime(ms: number): string {
 /** Convert milliseconds to sector time string (e.g. 33341 -> "33.341") */
 export function msToSectorTime(ms: number): string {
   if (ms <= 0) return "-";
-  return (ms / 1000).toFixed(3);
+  const minutes = Math.floor(ms / 60000);
+  const seconds = ((ms % 60000) / 1000).toFixed(3);
+  return minutes > 0 ? `${minutes}:${seconds.padStart(6, "0")}` : seconds;
+}
+
+export type SectorNumber = 1 | 2 | 3;
+
+const SECTOR_TIME_FIELDS = {
+  1: {
+    ms: "sector-1-time-in-ms",
+    minutes: "sector-1-time-minutes",
+  },
+  2: {
+    ms: "sector-2-time-in-ms",
+    minutes: "sector-2-time-minutes",
+  },
+  3: {
+    ms: "sector-3-time-in-ms",
+    minutes: "sector-3-time-minutes",
+  },
+} as const;
+
+/** PnG stores sector minutes separately from the millisecond remainder. */
+export function sectorTimeMs(lap: LapHistoryEntry, sector: SectorNumber): number {
+  const fields = SECTOR_TIME_FIELDS[sector];
+  const ms = lap[fields.ms];
+  const minutes = lap[fields.minutes] ?? 0;
+
+  return minutes * 60_000 + ms;
+}
+
+export function bestSectorTimeMs(
+  laps: readonly LapHistoryEntry[],
+  sector: SectorNumber,
+): number {
+  const values = laps
+    .map((lap) => sectorTimeMs(lap, sector))
+    .filter((value) => value > 0);
+
+  return values.length > 0 ? Math.min(...values) : 0;
 }
 
 /** Format wear percentage to 1 decimal place */
@@ -25,6 +66,26 @@ export function formatDate(dateStr: string): string {
     day: "numeric",
     month: "short",
     year: "numeric",
+  });
+}
+
+/**
+ * Friendly grouping label: "Today" / "Yesterday" for the last two days,
+ * otherwise weekday + day + month, and the year only when it differs from now.
+ * Compared against `now` (defaults to current time) so the result is stable per render.
+ */
+export function formatRelativeDate(dateStr: string, now: Date = new Date()): string {
+  const d = new Date(dateStr);
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const diffDays = Math.round((startOf(now) - startOf(d)) / dayMs);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
   });
 }
 
@@ -74,9 +135,19 @@ export function formatSessionType(type: string, formula?: string): string {
   }
 }
 
-/** Convert track name to a lowercase URL slug */
+/** Convert track names like "Abu Dhabi" to stable path slugs like "abu-dhabi". */
 export function toTrackSlug(track: string): string {
-  return track.toLowerCase();
+  return track
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+export function isTrackSlugMatch(track: string, slug: string | undefined): boolean {
+  return toTrackSlug(track) === (slug ?? "").toLowerCase();
 }
 
 /** Map F1 track names (from telemetry filenames) to ISO 3166-1 alpha-2 country codes */

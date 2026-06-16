@@ -14,10 +14,10 @@ Supports recent F1 (and F2) telemetry, including the newly released **2026 Seaso
 ## What It Does
 
 - 🏁 **Results dashboard** - See your real race form at a glance: average finish, podiums, wins, front-row starts, top-five rate, DNFs, grid gain, recent results, best and toughest tracks, comeback drives, lap-one gains, fastest-lap highlights, and tyre-management patterns.
-- 🧭 **Formula scopes** - Keep F1 26, F1 25, F2 25, and older data separate. The dashboard and sidebar default to the latest game generation while still letting you switch back to older sessions.
+- 🧭 **Formula scopes** - Keep F1 26, F1 25, F2 25, and older data separate with one app-wide selector and clean scoped URLs such as `/f1-26`, `/f1-26/tracks/sakhir`, and `/f1-26/sessions/session-slug`.
 - 🤝 **Rivals & teammates** - Aggregate online race rosters into teammate pace, frequent rivals, head-to-heads, fastest-lap threats, pole sitters, overtakers, and other repeat patterns.
 - 📊 **Session detail** - Open any race or qualifying session for lap-by-lap charts, sector tables, stint timelines, tyre wear, damage, ERS, fuel, position history, and driver-vs-driver deltas.
-- 🗺️ **Track progress** - Drill into a circuit to compare game generations, review best laps, qualifying progression, race pace, setup history, tyre life, fuel usage, and every saved session for that track.
+- 🗺️ **Track progress** - Drill into a circuit within the active game scope to review best laps, qualifying progression, race pace, setup history, tyre life, fuel usage, and every saved session for that track.
 - 🔒 **Private data loading** - Use the local API during development, self-host against your telemetry folder, or drag in `.json` files / a `.zip` in the browser. Hosted uploads stay in memory and never leave your device.
 
 The dashboard prefers representative online races when there is enough human-grid data. If that is not available for a formula scope, it gracefully falls back to whatever race results or session history exists, so you only see an empty state when there is truly no data to show.
@@ -70,6 +70,8 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ```bash
 pnpm dev            # Start dev server at http://localhost:5173
+pnpm dev:telemetry <folder>  # Start dev server with a specific telemetry folder
+pnpm dev:debug      # Start dev server with DEBUG_TELEMETRY_DIR from .env
 pnpm dev:prod       # Run the production-like demo/upload flow locally
 pnpm build          # Type-check and build the production app
 pnpm preview        # Preview the production build locally
@@ -79,6 +81,29 @@ pnpm find-session <slug-or-url>  # Resolve a session URL or slug to JSON
 ```
 
 No test runner or linter is configured yet; `pnpm build` is the main validation command.
+
+For debugging shared repro files without pointing at your full telemetry history, put the files in a small folder and launch against that folder:
+
+```bash
+pnpm dev:telemetry "/Users/linuz90/PC Stuff/Pits & Giggles/debug data"
+pnpm dev:telemetry /path/to/debug-data -- --host 127.0.0.1 --port 5174
+```
+
+The folder is served through the normal local `/api/sessions` flow, so scoped session URLs, track pages, and browser refreshes work the same way as your main telemetry directory.
+
+If you have a larger generated/debug telemetry corpus, keep its path out of git
+and put it in your local `.env`:
+
+```bash
+DEBUG_TELEMETRY_DIR=/path/to/generated/debug-telemetry
+pnpm dev:debug
+```
+
+For contributors working with the Pits n' Giggles repo, this can point at the
+folder produced after running its integration telemetry downloader/generator
+(for example `poetry run python tests/integration_test/runner.py` in that
+repo). This is optional local QA data, not something the open-source app
+requires or commits.
 
 ## Self-Hosting
 
@@ -132,3 +157,5 @@ The `TelemetryProvider` uses one data-access path for every screen:
 3. Fall back to browser upload mode.
 
 That keeps dashboard cards, track pages, and session pages working the same way whether the app is reading your local folder, serving demo data, or parsing files dropped into the browser.
+
+Formula/game scope is part of the route, not a query parameter. The root path redirects to the latest scope with data; all analysis screens live under `/:formulaKey` so dashboard cards, sidebar sessions, track history, PBs, tyre life, and setup comparisons always describe the same game generation.

@@ -46,6 +46,13 @@ export interface SessionSummary {
    */
   rivals?: RivalEntry[];
   playerRaceResult?: PlayerRaceResult;
+  /** Player's final classification position in a qualifying session (1 = pole). */
+  qualifyingPosition?: number;
+  /** Number of classified drivers in the qualifying session — denominator for qualifyingPosition. */
+  qualifyingFieldSize?: number;
+  /** Fastest valid lap of the qualifying session (pole time). */
+  poleLapTime?: string;
+  poleLapTimeMs?: number;
   fileSize?: number;
   duplicateCount?: number;
   /**
@@ -104,6 +111,17 @@ export interface RivalEntry {
   meanLapMs?: number;
   /** Std-deviation of valid lap times (ms). */
   stddevLapMs?: number;
+  /**
+   * Race-level pace delta using clean laps on compounds both drivers used.
+   * Negative means the rival was faster than the player. This is preferred for
+   * dashboard pace benchmarks because it is fairer than comparing isolated
+   * best laps across different tyres.
+   */
+  compoundMatchedPaceDeltaMs?: number;
+  /** Evidence count for compoundMatchedPaceDeltaMs: sum of shared clean-lap samples. */
+  compoundMatchedPaceLapCount?: number;
+  /** Visual compounds that contributed to compoundMatchedPaceDeltaMs. */
+  compoundMatchedPaceCompounds?: string[];
   /** Times this driver overtook anyone on track (overtakes.records). */
   overtakes: number;
   /** Times this driver overtook the player. */
@@ -331,10 +349,13 @@ export interface LapHistoryEntry {
   "lap-time-in-ms": number;
   "lap-time-str": string;
   "sector-1-time-in-ms": number;
+  "sector-1-time-minutes"?: number;
   "sector-1-time-str": string;
   "sector-2-time-in-ms": number;
+  "sector-2-time-minutes"?: number;
   "sector-2-time-str": string;
   "sector-3-time-in-ms": number;
+  "sector-3-time-minutes"?: number;
   "sector-3-time-str": string;
   "lap-valid-bit-flags": number;
 }

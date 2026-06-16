@@ -11,12 +11,14 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { cn } from "../../utils/cn";
 import { getTeamColor } from "../../utils/colors";
 import type {
   RivalCard as RivalCardData,
   RivalCardKind,
 } from "../../utils/rivalStats";
-import { ACCENT_TOKENS, accentCardClass, type AccentColor } from "../Card";
+import { type AccentColor } from "../Card";
+import { InsightTile } from "../ui/InsightTile";
 
 interface RivalCardStyle {
   title: string;
@@ -82,8 +84,6 @@ function splitHeadline(headline: string): {
 
 export function RivalCard({ card }: { card: RivalCardData }) {
   const style = RIVAL_CARD_STYLES[card.kind];
-  const tokens = ACCENT_TOKENS[style.accent];
-  const Icon = style.icon;
   // Online lobbies report team as a numeric code (e.g. "211") which isn't
   // a useful label, so we only render the team color chip. The colors util
   // returns a neutral fallback for unknown codes.
@@ -98,19 +98,8 @@ export function RivalCard({ card }: { card: RivalCardData }) {
         ? "text-rose-300"
         : undefined;
   return (
-    <div
-      className={`flex flex-col rounded-2xl ${accentCardClass(style.accent)} px-4 pb-2.5 pt-3 transition-all hover:brightness-110`}
-    >
-      <div className="flex items-center gap-2">
-        <Icon className={`size-3.5 ${tokens.iconText}`} />
-        <span
-          className={`text-[11px] font-mono font-semibold uppercase tracking-wider ${tokens.iconText}`}
-        >
-          {style.title}
-        </span>
-      </div>
-
-      <div className="mt-2 flex max-w-full items-center gap-2">
+    <InsightTile title={style.title} icon={style.icon} accent={style.accent}>
+      <div className="flex max-w-full items-center gap-2">
         {teamColor && (
           <span
             className="inline-block size-2.5 shrink-0 rounded-sm"
@@ -131,7 +120,7 @@ export function RivalCard({ card }: { card: RivalCardData }) {
           indicator rather than the two-tone clash of accent-on-accent. */}
       <div className="mt-1 flex items-baseline font-bold tabular-nums leading-none tracking-tight">
         {sign && (
-          <span className={`text-3xl font-mono ${signClass}`}>{sign}</span>
+          <span className={cn("text-3xl font-mono", signClass)}>{sign}</span>
         )}
         <span className="text-3xl font-mono text-zinc-100">{value}</span>
         {unit && (
@@ -141,9 +130,9 @@ export function RivalCard({ card }: { card: RivalCardData }) {
         )}
       </div>
 
-      <div className="mt-3 truncate border-t border-white/[0.05] pt-2 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+      <div className="mt-3 truncate border-t border-white/[0.05] pt-2 text-2xs font-medium uppercase tracking-wider text-zinc-500">
         {card.detail}
       </div>
-    </div>
+    </InsightTile>
   );
 }

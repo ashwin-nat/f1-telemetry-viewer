@@ -19,17 +19,20 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import type {
   InsightKind,
   InsightScope,
   TrackInsight,
 } from "../../utils/dashboardStats";
-import { ACCENT_TOKENS, accentCardClass, type AccentColor } from "../Card";
+import { cn } from "../../utils/cn";
+import { sessionPath } from "../../utils/routes";
+import { ACCENT_TOKENS, type AccentColor } from "../Card";
 import { TrackFlag } from "../TrackFlag";
 import { TrackLayout } from "../TrackLayout";
+import { Badge } from "../ui/Badge";
+import { InsightTile } from "../ui/InsightTile";
+import { HStack } from "../ui/Stack";
 import { trackFormulaPath } from "./helpers";
-import { sessionFormulaPath } from "../../utils/routes";
 
 interface InsightStyle {
   title: string;
@@ -109,49 +112,47 @@ const SCOPE_LABEL: Partial<Record<InsightScope, string>> = {
 export function InsightCard({ insight }: { insight: TrackInsight }) {
   const style = INSIGHT_STYLES[insight.kind];
   const tokens = ACCENT_TOKENS[style.accent];
-  const Icon = style.icon;
   const to = insight.sessionSlug
-    ? sessionFormulaPath(insight.sessionSlug, insight.formulaKey)
+    ? sessionPath(insight.formulaKey, insight.sessionSlug)
     : trackFormulaPath(insight.track, insight.formulaKey);
+  const scopeBadge = SCOPE_LABEL[insight.scope];
 
   return (
-    <Link
+    <InsightTile
+      title={style.title}
+      icon={style.icon}
+      accent={style.accent}
       to={to}
-      className={`relative block overflow-hidden rounded-2xl ${accentCardClass(style.accent)} p-3.5 transition-all hover:brightness-125`}
+      badge={
+        scopeBadge ? (
+          <Badge size="xs" shape="square" tone="zinc" className="tracking-wider">
+            {scopeBadge}
+          </Badge>
+        ) : undefined
+      }
+      background={
+        <TrackLayout
+          track={insight.track}
+          className={cn("pointer-events-none absolute right-6 top-1/2 size-34 -translate-y-1/2 opacity-6 [&>svg]:size-full [&_path]:![stroke-width:7]", tokens.iconText)}
+        />
+      }
     >
-      <TrackLayout
-        track={insight.track}
-        className={`pointer-events-none absolute right-6 top-1/2 size-34 -translate-y-1/2 ${tokens.iconText} opacity-6 [&>svg]:size-full [&_path]:![stroke-width:7]`}
-      />
-      <div className="relative flex items-center gap-2">
-        <Icon className={`size-3.5 ${tokens.iconText}`} />
-        <span
-          className={`text-[11px] font-mono font-semibold uppercase tracking-wider ${tokens.iconText}`}
-        >
-          {style.title}
-        </span>
-        {SCOPE_LABEL[insight.scope] && (
-          <span className="ml-auto rounded-sm bg-zinc-900/80 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider text-zinc-500">
-            {SCOPE_LABEL[insight.scope]}
-          </span>
-        )}
-      </div>
-      <div className="relative mt-2.5 flex items-center justify-between gap-3">
+      <HStack justify="between" className="gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 truncate text-base font-semibold">
+          <HStack className="gap-1.5 truncate text-base font-semibold">
             <TrackFlag track={insight.track} />
             <span className="truncate">{insight.track}</span>
-          </div>
+          </HStack>
           <div className="mt-1 truncate text-xs text-zinc-500">
             {insight.detail}
           </div>
         </div>
         <div
-          className={`shrink-0 text-right font-mono text-2xl font-semibold tabular-nums ${tokens.accent}`}
+          className={cn("shrink-0 text-right font-mono text-2xl font-semibold tabular-nums", tokens.accent)}
         >
           {insight.headline}
         </div>
-      </div>
-    </Link>
+      </HStack>
+    </InsightTile>
   );
 }

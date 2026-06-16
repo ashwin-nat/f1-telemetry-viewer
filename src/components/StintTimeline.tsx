@@ -1,5 +1,7 @@
 import type { TyreStint, LapHistoryEntry } from "../types/telemetry";
 import { getCompoundColor } from "../utils/colors";
+import { cn } from "../utils/cn";
+import { stintChipStyle, stintChipTextStyle } from "./ui/StintChip";
 import { stintWearRate, getWorstWheelWear, estimateMaxLife, PUNCTURE_THRESHOLD } from "../utils/stats";
 import { msToLapTime, isLapValid } from "../utils/format";
 import { CompoundStatCard } from "./CompoundStatCard";
@@ -26,22 +28,26 @@ export function StintTimeline({ stints, totalLaps }: StintTimelineProps) {
       <h3 className="text-sm font-semibold text-zinc-300 mb-2">
         Stint Analysis
       </h3>
-      <div className="flex h-10 rounded-lg overflow-hidden gap-0.5">
+      <div className="flex h-10 gap-0.5">
         {stints.map((stint, i) => {
           const compound = stint["tyre-set-data"]["visual-tyre-compound"];
-          const color = getCompoundColor(compound);
           const widthPct = (stint["stint-length"] / effectiveTotal) * 100;
           const isLastUnfinished =
             i === stints.length - 1 && stint["end-lap"] < totalLaps;
+          const isFirst = i === 0;
+          const isLast = i === stints.length - 1;
 
           return (
             <div
               key={i}
-              className="flex items-center justify-center text-xs font-bold relative"
+              className={cn(
+                "flex items-center justify-center overflow-hidden text-xs font-bold relative",
+                isFirst && "rounded-l-lg",
+                isLast && "rounded-r-lg",
+              )}
               style={{
                 width: `${widthPct}%`,
-                backgroundColor: color,
-                color: compound === "Hard" ? "#18181b" : "#fff",
+                ...stintChipStyle(compound),
                 minWidth: "40px",
                 ...(isLastUnfinished && {
                   maskImage:
@@ -50,7 +56,7 @@ export function StintTimeline({ stints, totalLaps }: StintTimelineProps) {
               }}
               title={`${compound}: Laps ${stint["start-lap"]}–${stint["end-lap"]} (${stint["stint-length"]} laps)`}
             >
-              <span className="truncate px-1">
+              <span className="truncate px-1" style={stintChipTextStyle(compound)}>
                 {compound[0]} · L{stint["start-lap"]}–{stint["end-lap"]}
               </span>
             </div>

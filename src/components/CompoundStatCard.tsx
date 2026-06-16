@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { getCompoundColor } from "../utils/colors";
 import { dynamicAccentCardStyle } from "./Card";
+import { HStack } from "./ui/Stack";
 import { tableRowClass } from "./ui/table";
+import { cn } from "../utils/cn";
 
 interface CompoundStatCardRow {
   label: string;
@@ -31,10 +33,10 @@ export function CompoundStatCard({ compound, subtitle, rows, hero, progress, cla
   // static-color accents (podium chips, insight cards, best-lap highlights).
   return (
     <div
-      className={`rounded-xl px-3 py-3 ${className ?? ""}`}
+      className={cn("rounded-xl px-3 py-3", className)}
       style={dynamicAccentCardStyle(color)}
     >
-      <div className="flex items-center gap-1.5 mb-1.5">
+      <HStack className="mb-1.5 gap-1.5">
         <span
           className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
           style={{ backgroundColor: color }}
@@ -43,27 +45,27 @@ export function CompoundStatCard({ compound, subtitle, rows, hero, progress, cla
           {compound}
         </span>
         {subtitle && (
-          <span className="text-[10px] text-zinc-500 ml-auto">{subtitle}</span>
+          <span className="text-2xs text-zinc-500 ml-auto">{subtitle}</span>
         )}
-      </div>
+      </HStack>
       {hero && (
         <div className="text-center py-2 mb-1.5">
           <div className="font-mono text-2xl font-semibold text-zinc-100">
             {hero.value}
           </div>
-          <div className="text-[11px] text-zinc-500 mt-0.5">{hero.label}</div>
+          <div className="text-xs text-zinc-500 mt-0.5">{hero.label}</div>
         </div>
       )}
       <div className="text-xs text-zinc-400 space-y-1.5">
         {rows.map((row, i) => (
           <div key={i}>
-            {row.divider && <div className={`${tableRowClass} my-2`} />}
-            <div className="flex justify-between">
+            {row.divider && <div className={cn(tableRowClass, "my-2")} />}
+            <HStack justify="between">
               <span>{row.label}</span>
               <span className={row.className ?? "text-zinc-300 font-mono"}>
                 {row.value}
               </span>
-            </div>
+            </HStack>
           </div>
         ))}
         {progress && (

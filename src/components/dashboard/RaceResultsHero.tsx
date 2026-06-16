@@ -1,7 +1,16 @@
-import { AlertTriangle, ChevronsUp, Flag, Globe, Star, type LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronsUp,
+  Flag,
+  Globe,
+  Star,
+  type LucideIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
-import { Card } from "../Card";
+import { cn } from "../../utils/cn";
 import type { DashboardResultStats } from "../../utils/dashboardStats";
+import { Card } from "../Card";
+import { HStack, VStack } from "../ui/Stack";
 import { GridGainGlyph } from "./GridGainGlyph";
 import { RaceResultsProgression } from "./RaceResultsProgression";
 import {
@@ -24,19 +33,20 @@ function PodiumChip({
 }) {
   const Icon = podiumIcon(position)!;
   return (
-    <div
-      className={`flex flex-1 items-center justify-center gap-3 rounded-xl px-4 py-3 ${positionBadgeClasses(position)}`}
+    <HStack
+      justify="center"
+      className={cn("flex-1 gap-3 rounded-xl px-4 py-3", positionBadgeClasses(position))}
     >
       <Icon className="size-5 shrink-0 opacity-80" />
-      <div className="flex flex-col items-start gap-0.5">
-        <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+      <VStack align="start" className="gap-0.5">
+        <span className="text-2xs font-bold uppercase tracking-wider opacity-80">
           P{position}
         </span>
         <span className="text-2xl font-semibold leading-none tabular-nums">
           {count}
         </span>
-      </div>
-    </div>
+      </VStack>
+    </HStack>
   );
 }
 
@@ -55,11 +65,11 @@ function MicroStat({
 }) {
   return (
     <div className="min-w-0">
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+      <HStack className="gap-1.5 text-xs font-mono font-semibold uppercase tracking-wider text-zinc-500">
         {Icon && <Icon className="size-3" />}
         {label}
-      </div>
-      <div className={`mt-1 text-xl font-semibold tabular-nums ${tone}`}>
+      </HStack>
+      <div className={cn("mt-1 text-xl font-semibold tabular-nums", tone)}>
         {value}
       </div>
       {detail && <div className="mt-0.5 text-xs text-zinc-500">{detail}</div>}
@@ -99,29 +109,34 @@ export function RaceResultsHero({
     <Card as="section" className="overflow-hidden">
       {/* Negative margins pull the header strip out of Card's p-5 so the divider
           runs edge-to-edge; the wrapper Card clips them via overflow-hidden. */}
-      <header className="-mx-5 -mt-5 mb-6 flex items-center justify-between border-b border-white/[0.05] px-5 py-3 text-xs">
+      <HStack
+        as="header"
+        justify="between"
+        className="-mx-5 -mt-5 mb-6 border-b border-white/[0.05] px-5 py-3 text-xs"
+      >
         <span className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-wider text-zinc-400">
-          {(stats.mode === "representative-online" || stats.mode === "online") && (
+          {(stats.mode === "representative-online" ||
+            stats.mode === "online") && (
             <Globe className="size-3 text-zinc-500" />
           )}
           {stats.modeLabel}
         </span>
-        <span className="text-zinc-500">
+        <span className="text-zinc-500 font-mono">
           {stats.starts} {stats.starts === 1 ? "start" : "starts"}
           {trackCount > 0 &&
             ` · ${trackCount} ${trackCount === 1 ? "track" : "tracks"}`}
         </span>
-      </header>
+      </HStack>
 
-      <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+      <VStack className="gap-6 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
-          <div className="text-6xl font-semibold leading-none tracking-tight tabular-nums text-zinc-100">
+          <div className="text-6xl font-semibold leading-[0.8] tracking-tight tabular-nums text-zinc-100 mb-3.5">
             {headlineValue}
           </div>
           <div className="mt-2 text-sm text-zinc-400">{headlineCaption}</div>
           {gridGain != null && (
             <div
-              className={`mt-3 inline-flex items-center gap-1.5 text-xs font-mono ${gridGainTone(gridGain)}`}
+              className={cn("mt-3 inline-flex items-center gap-1.5 text-xs font-mono", gridGainTone(gridGain))}
             >
               <GridGainGlyph value={gridGain} />
               <span>{signedNumber(gridGain)} avg grid Δ</span>
@@ -129,20 +144,20 @@ export function RaceResultsHero({
           )}
         </div>
 
-        <div className="flex flex-col items-stretch gap-2 md:min-w-[20rem]">
-          <div className="flex gap-2 sm:gap-3">
+        <VStack className="gap-2 md:min-w-[20rem]">
+          <HStack className="gap-2 sm:gap-3">
             <PodiumChip position={1} count={stats.wins} />
             <PodiumChip position={2} count={stats.p2} />
             <PodiumChip position={3} count={stats.p3} />
-          </div>
+          </HStack>
           {podiums > 0 && (
-            <p className="text-right text-[11px] uppercase tracking-wider text-zinc-500">
+            <p className="text-right font-mono text-xs uppercase tracking-wider text-zinc-500">
               {podiums} {podiums === 1 ? "podium" : "podiums"} · {podiumRate}%
               rate
             </p>
           )}
-        </div>
-      </div>
+        </VStack>
+      </VStack>
 
       <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-white/[0.05] pt-5 sm:grid-cols-2 lg:grid-cols-4">
         <MicroStat

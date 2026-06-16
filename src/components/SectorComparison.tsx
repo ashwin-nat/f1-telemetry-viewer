@@ -1,5 +1,6 @@
 import type { LapHistoryEntry, PerLapInfo, TyreStintBasic } from "../types/telemetry";
-import { isLapValid, msToLapTime } from "../utils/format";
+import { isLapValid, msToLapTime, msToSectorTime, sectorTimeMs } from "../utils/format";
+import { cn } from "../utils/cn";
 import { getCompoundColor, PERF_COLORS } from "../utils/colors";
 import { ersDeployMjForLap, ersHarvestMjForLap } from "../utils/stats";
 import { accentCardClass, neutralCardClass } from "./Card";
@@ -46,9 +47,9 @@ export function SectorComparison({ laps, stints, perLapInfo }: SectorComparisonP
       const ers = lapErs.get(lapNum);
       return {
         lap: lapNum,
-        s1: l["sector-1-time-in-ms"] / 1000,
-        s2: l["sector-2-time-in-ms"] / 1000,
-        s3: l["sector-3-time-in-ms"] / 1000,
+        s1: sectorTimeMs(l, 1) / 1000,
+        s2: sectorTimeMs(l, 2) / 1000,
+        s3: sectorTimeMs(l, 3) / 1000,
         total: l["lap-time-in-ms"] / 1000,
         totalStr: l["lap-time-str"],
         valid: isLapValid(l["lap-valid-bit-flags"]),
@@ -112,13 +113,14 @@ export function SectorComparison({ laps, stints, perLapInfo }: SectorComparisonP
           return (
             <div
               key={d.lap}
-              className={`rounded-lg px-3 py-2.5 ${
+              className={cn(
+                "rounded-lg px-3 py-2.5",
                 !d.valid
                   ? "opacity-60 border border-dashed border-red-500/40 bg-zinc-950/50"
                   : isBest
                     ? accentCardClass("purple")
-                    : neutralCardClass
-              }`}
+                    : neutralCardClass,
+              )}
             >
               {/* Header row: lap number, validity, total time, delta */}
               <div className="flex items-center gap-3 mb-1.5">
@@ -147,13 +149,14 @@ export function SectorComparison({ laps, stints, perLapInfo }: SectorComparisonP
 
                 <span className="ml-auto flex items-center gap-3">
                   <span
-                    className={`font-mono text-sm font-semibold ${
+                    className={cn(
+                      "font-mono text-sm font-semibold",
                       !d.valid
                         ? "text-behind/70 line-through"
                         : isBest
                           ? "text-best"
-                          : "text-zinc-200"
-                    }`}
+                          : "text-zinc-200",
+                    )}
                   >
                     {msToLapTime(d.total * 1000)}
                   </span>
@@ -173,21 +176,21 @@ export function SectorComparison({ laps, stints, perLapInfo }: SectorComparisonP
                   When ERS exists for the session but not this specific lap (Pits n' Giggles can omit
                   per-lap-info for some laps), show a dimmed placeholder so the gap is explicit. */}
               {(hasDeploy || hasHarv) && (
-                <div className="flex items-center gap-3 mb-1 text-[11px] font-mono">
+                <div className="flex items-center gap-3 mb-1 text-xs font-mono">
                   {hasDeploy && (
-                    <span className={`flex items-center gap-1 ${d.deployMj != null && d.deployMj > 0 ? "text-ahead" : "text-zinc-600"}`}>
-                      <span className="text-zinc-500 text-[10px] uppercase tracking-wide">Dep</span>
+                    <span className={cn("flex items-center gap-1", d.deployMj != null && d.deployMj > 0 ? "text-ahead" : "text-zinc-600")}>
+                      <span className="text-zinc-500 text-2xs uppercase tracking-wide">Dep</span>
                       <span>{d.deployMj != null && d.deployMj > 0 ? `${d.deployMj.toFixed(1)} MJ` : "–"}</span>
                     </span>
                   )}
                   {hasHarv && (
-                    <span className={`flex items-center gap-1 ${d.harvMj != null && d.harvMj > 0 ? "text-sky-400" : "text-zinc-600"}`}>
-                      <span className="text-zinc-500 text-[10px] uppercase tracking-wide">Harv</span>
+                    <span className={cn("flex items-center gap-1", d.harvMj != null && d.harvMj > 0 ? "text-sky-400" : "text-zinc-600")}>
+                      <span className="text-zinc-500 text-2xs uppercase tracking-wide">Harv</span>
                       <span>{d.harvMj != null && d.harvMj > 0 ? `${d.harvMj.toFixed(1)} MJ` : "–"}</span>
                     </span>
                   )}
                   {d.deployMj == null && d.harvMj == null && (
-                    <span className="text-zinc-600 text-[10px] italic">no per-lap telemetry captured</span>
+                    <span className="text-zinc-600 text-2xs italic">no per-lap telemetry captured</span>
                   )}
                 </div>
               )}
@@ -220,11 +223,12 @@ export function SectorComparison({ laps, stints, perLapInfo }: SectorComparisonP
                       }}
                     >
                       <span
-                        className={`px-1 truncate ${
-                          isBestSector ? "text-white font-bold" : "text-white/80"
-                        }`}
+                        className={cn(
+                          "px-1 truncate",
+                          isBestSector ? "text-white font-bold" : "text-white/80",
+                        )}
                       >
-                        {sectorKey}: {time.toFixed(3)}
+                        {sectorKey}: {msToSectorTime(time * 1000)}
                       </span>
                     </div>
                   );

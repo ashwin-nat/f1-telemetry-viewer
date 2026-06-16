@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { DriverData, RaceControlEvent } from "../types/telemetry";
+import { cn } from "../utils/cn";
 import { getTeamColor, getTeamName } from "../utils/colors";
 import {
   eventMatchesRaceControlFocus,
@@ -187,7 +188,7 @@ export function RaceControlTimeline({ events, focusedDriver }: RaceControlTimeli
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-zinc-300">Race Control</h3>
-          <p className="mt-0.5 text-[11px] text-zinc-500">
+          <p className="mt-0.5 text-xs text-zinc-500">
             {keyEventCount} key event{keyEventCount === 1 ? "" : "s"} / {events.length} total
           </p>
         </div>
@@ -199,11 +200,12 @@ export function RaceControlTimeline({ events, focusedDriver }: RaceControlTimeli
                 key={mode}
                 type="button"
                 onClick={() => setViewMode(mode)}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                   viewMode === mode
                     ? "bg-zinc-800 text-zinc-100"
-                    : "text-zinc-500 hover:text-zinc-300"
-                }`}
+                    : "text-zinc-500 hover:text-zinc-300",
+                )}
               >
                 {mode === "key" ? "Key events" : "All events"}
               </button>
@@ -218,10 +220,10 @@ export function RaceControlTimeline({ events, focusedDriver }: RaceControlTimeli
                 role="switch"
                 aria-checked={focusOnly}
                 onClick={() => setFocusOnly((value) => !value)}
-                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${focusOnly ? "bg-cyan-600" : "bg-zinc-800"}`}
+                className={cn("relative inline-flex h-4 w-7 items-center rounded-full transition-colors", focusOnly ? "bg-cyan-600" : "bg-zinc-800")}
               >
                 <span
-                  className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${focusOnly ? "translate-x-3.5" : "translate-x-0.5"}`}
+                  className={cn("inline-block h-3 w-3 rounded-full bg-white transition-transform", focusOnly ? "translate-x-3.5" : "translate-x-0.5")}
                 />
               </button>
             </label>
@@ -240,7 +242,7 @@ export function RaceControlTimeline({ events, focusedDriver }: RaceControlTimeli
             {groups.map((group) => (
               <section key={group.key} className="space-y-2">
                 <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 bg-card-surface px-1 py-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                     {group.label}
                   </span>
                   <span className="h-px flex-1 bg-zinc-800/70" />
@@ -285,21 +287,21 @@ function RaceControlEventRow({
   return (
     <div className="rounded-md border border-zinc-800/80 bg-zinc-950/60 px-3 py-2.5 shadow-sm shadow-black/10">
       <div className="flex gap-3">
-        <span className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg ${style.iconClass}`}>
+        <span className={cn("mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg", style.iconClass)}>
           <Icon className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-sm leading-snug text-zinc-200">{formatRaceControlEvent(event)}</span>
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${style.badgeClass}`}>
+            <span className={cn("rounded px-1.5 py-0.5 text-2xs font-semibold", style.badgeClass)}>
               {style.label}
             </span>
             {clock && (
-              <span className="font-mono text-[10px] text-zinc-500">{clock}</span>
+              <span className="font-mono text-2xs text-zinc-500">{clock}</span>
             )}
           </div>
           {primaryDriver && (
-            <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-zinc-500">
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-500">
               <span
                 className="inline-block size-1.5 rounded-full"
                 style={{ backgroundColor: getTeamColor(primaryDriver.team) }}
@@ -312,7 +314,7 @@ function RaceControlEventRow({
               {details.map((detail) => (
                 <span
                   key={detail}
-                  className="rounded bg-zinc-950/80 px-1.5 py-0.5 text-[10px] text-zinc-500"
+                  className="rounded bg-zinc-950/80 px-1.5 py-0.5 text-2xs text-zinc-500"
                 >
                   {detail}
                 </span>
