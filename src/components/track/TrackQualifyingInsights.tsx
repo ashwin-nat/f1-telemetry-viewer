@@ -9,8 +9,15 @@ import {
   TimerReset,
   Trophy,
 } from "lucide-react";
-import { msToLapTime, msToSectorTime } from "../../utils/format";
-import type { TrackQualifyingInsights as TrackQualifyingInsightsModel } from "../../utils/qualifyingInsights";
+import {
+  formatSignedSeconds,
+  joinMetaParts,
+  msToLapTime,
+  msToSectorTime,
+  pluralize,
+} from "../../utils/format";
+import type { TrackQualifyingInsights as TrackQualifyingInsightsModel } from "../../analysis/trackQualifyingInsights";
+import { InsightDetail, InsightValue } from "../ui/InsightText";
 import { InsightTile } from "../ui/InsightTile";
 import { SectionHeader } from "../ui/SectionHeader";
 
@@ -47,14 +54,14 @@ export function TrackQualifyingInsights({
   // Subtitle mirrors the Race section's "N races · N full-distance" format.
   // Only spell out the online split when there's actually a split worth
   // spelling out — otherwise the count alone reads cleanly.
-  const subtitleParts: string[] = [];
-  subtitleParts.push(`${qualiCount} quali${qualiCount === 1 ? "" : "s"}`);
-  if (onlineCount > 0 && offlineCount > 0) {
-    subtitleParts.push(`${onlineCount} online · ${offlineCount} offline`);
-  } else if (onlineCount > 0) {
-    subtitleParts.push("online");
-  }
-  const subtitle = subtitleParts.join(" · ");
+  const subtitle = joinMetaParts([
+    pluralize(qualiCount, "quali", "qualis"),
+    onlineCount > 0 && offlineCount > 0
+      ? `${onlineCount} online · ${offlineCount} offline`
+      : onlineCount > 0
+        ? "online"
+        : null,
+  ]);
 
   // When both pools exist we show them as separate tiles so the user can read
   // each ceiling independently. Otherwise we fall back to a single "best lap"
@@ -90,17 +97,13 @@ export function TrackQualifyingInsights({
         )}
 
         {theoreticalBestMs > 0 && (
-          <InsightTile
-            title="Theoretical Best"
-            icon={Target}
-            accent="emerald"
-          >
-            <div className="font-mono text-xl text-ahead">
+          <InsightTile title="Theoretical Best" icon={Target} accent="emerald">
+            <InsightValue tone="text-ahead">
               {msToLapTime(theoreticalBestMs)}
-            </div>
-            <div className="mt-0.5 text-xs text-zinc-500">
+            </InsightValue>
+            <InsightDetail size="sm" tone="text-zinc-500" className="mt-0.5">
               sum of best S1 + S2 + S3 here
-            </div>
+            </InsightDetail>
           </InsightTile>
         )}
 
@@ -110,12 +113,12 @@ export function TrackQualifyingInsights({
             icon={TimerReset}
             accent="amber"
           >
-            <div className="font-mono text-xl text-warning">
-              +{(gapToTheoreticalMs / 1000).toFixed(3)}s
-            </div>
-            <div className="mt-0.5 text-xs text-zinc-500">
+            <InsightValue tone="text-warning">
+              {formatSignedSeconds(gapToTheoreticalMs)}
+            </InsightValue>
+            <InsightDetail size="sm" tone="text-zinc-500" className="mt-0.5">
               best lap vs. theoretical
-            </div>
+            </InsightDetail>
           </InsightTile>
         )}
 
@@ -146,24 +149,19 @@ function BestQualiTile({
   // offline AI qualis (the player almost always sits on pole vs the field),
   // so we only render it when the player took at least one pole AND the
   // denominator gives the number context.
-  const noteParts: string[] = [];
-  noteParts.push(
-    `${bucket.sessionCount} session${bucket.sessionCount === 1 ? "" : "s"}`,
-  );
+  const noteParts: string[] = [pluralize(bucket.sessionCount, "session")];
   if (bucket.polesByPlayer > 0) {
-    noteParts.push(
-      `pole in ${bucket.polesByPlayer}/${bucket.sessionCount}`,
-    );
+    noteParts.push(`pole in ${bucket.polesByPlayer}/${bucket.sessionCount}`);
   }
 
   return (
     <InsightTile title={title} icon={icon} accent="purple">
-      <div className="font-mono text-xl font-semibold text-purple-300">
+      <InsightValue tone="text-best">
         {bucket.bestLapMs > 0 ? msToLapTime(bucket.bestLapMs) : "–"}
-      </div>
-      <div className="mt-1.5 text-xs text-zinc-400">
+      </InsightValue>
+      <InsightDetail size="sm" className="mt-1.5">
         {noteParts.join(" · ")}
-      </div>
+      </InsightDetail>
     </InsightTile>
   );
 }
@@ -193,9 +191,7 @@ function FastestOnlinePoleTile({
       ? "rose"
       : undefined;
   const Icon = playerLeads ? Trophy : rivalAhead ? Swords : Crown;
-  const title = playerLeads
-    ? "You Own Pole Here"
-    : "Fastest Online Pole Here";
+  const title = playerLeads ? "You Own Pole Here" : "Fastest Online Pole Here";
 
   const polesByOthers = benchmark.beatenSessionCount;
   const denom = benchmark.onlineSessionCount;
@@ -203,7 +199,7 @@ function FastestOnlinePoleTile({
   // Detail line — avoid restating the delta (the hero already shows it). Focus
   // on the share count so the user knows the *frequency* of being out-qualified,
   // not just the magnitude.
-  const sessionsLabel = `${denom} online session${denom === 1 ? "" : "s"}`;
+  const sessionsLabel = `${denom} online ${denom === 1 ? "session" : "sessions"}`;
   let detail: string;
   if (playerLeads) {
     detail = `every pole here · ${sessionsLabel}`;
@@ -215,30 +211,35 @@ function FastestOnlinePoleTile({
 
   return (
     <InsightTile title={title} icon={Icon} accent={accent}>
-      <div className="font-mono text-lg text-zinc-100">
+      <InsightValue size="md">
         {playerLeads ? (
-          <span className="text-purple-300">{msToLapTime(benchmark.poleLapMs)}</span>
+          <span className="text-best">{msToLapTime(benchmark.poleLapMs)}</span>
         ) : rivalAhead ? (
           <>
-            <span className="text-behind">−{msToSectorTime(Math.abs(benchmark.deltaVsPlayerMs))}</span>
+            <span className="text-behind">
+              −{msToSectorTime(Math.abs(benchmark.deltaVsPlayerMs))}
+            </span>
             <span className="ml-2 text-sm text-zinc-300">
               vs. {msToLapTime(benchmark.poleLapMs)} pole
             </span>
           </>
         ) : (
-          <>Matched <span className="text-sm text-zinc-300">at {msToLapTime(benchmark.poleLapMs)}</span></>
+          <>
+            Matched{" "}
+            <span className="text-sm text-zinc-300">
+              at {msToLapTime(benchmark.poleLapMs)}
+            </span>
+          </>
         )}
-      </div>
-      <div className="mt-0.5 text-xs text-zinc-500">{detail}</div>
+      </InsightValue>
+      <InsightDetail size="sm" tone="text-zinc-500" className="mt-0.5">
+        {detail}
+      </InsightDetail>
     </InsightTile>
   );
 }
 
-function VsLastQualiTile({
-  bestLapDeltaMs,
-}: {
-  bestLapDeltaMs: number;
-}) {
+function VsLastQualiTile({ bestLapDeltaMs }: { bestLapDeltaMs: number }) {
   // Mirror the Race tab's vs-last-race tile: tint only the number itself, keep
   // the surrounding prose neutral so the eye lands on the delta.
   const faster = bestLapDeltaMs < 0;
@@ -247,15 +248,15 @@ function VsLastQualiTile({
 
   return (
     <InsightTile title="vs. Last Quali Here" icon={History}>
-      <div className="font-mono text-lg text-zinc-100">
+      <InsightValue size="md">
         {heroVerb}{" "}
         <span className={heroValueTone}>
           {msToSectorTime(Math.abs(bestLapDeltaMs))}
         </span>
-      </div>
-      <div className="mt-0.5 text-xs text-zinc-500">
+      </InsightValue>
+      <InsightDetail size="sm" tone="text-zinc-500" className="mt-0.5">
         best lap vs. previous quali here
-      </div>
+      </InsightDetail>
     </InsightTile>
   );
 }

@@ -1,5 +1,5 @@
 import type { SessionSummary } from "../types/telemetry";
-import { isRaceSessionType } from "./sessionTypes";
+import { isRaceSessionType } from "../utils/sessionTypes";
 
 /**
  * Per-race driver rosters live on each {@link SessionSummary} as `rivals[]`.
@@ -251,7 +251,10 @@ function isDnfStatus(status: string | undefined): boolean {
   );
 }
 
-function newAggregate(rival: { key: string; name: string; team?: string }, fallbackTrack: string): RivalAggregate {
+function newAggregate(
+  rival: { key: string; name: string; team?: string },
+  fallbackTrack: string,
+): RivalAggregate {
   return {
     key: rival.key,
     name: rival.name,
@@ -292,7 +295,9 @@ function newAggregate(rival: { key: string; name: string; team?: string }, fallb
   };
 }
 
-function aggregateRivals(sessions: SessionSummary[]): Map<string, RivalAggregate> {
+function aggregateRivals(
+  sessions: SessionSummary[],
+): Map<string, RivalAggregate> {
   const map = new Map<string, RivalAggregate>();
   // Assign a recency weight per session — newest race = 1.0, decaying with
   // half-life RECENCY_HALF_LIFE_RACES. Drops to 0 once older than the floor so
@@ -408,7 +413,9 @@ function aggregateRivals(sessions: SessionSummary[]): Map<string, RivalAggregate
  * giving recent races more pull than ancient ones. Falls back to a plain
  * median if every weight is zero (e.g. all samples sit past the recency floor).
  */
-function weightedMedian(samples: { value: number; weight: number }[]): number | undefined {
+function weightedMedian(
+  samples: { value: number; weight: number }[],
+): number | undefined {
   if (samples.length === 0) return undefined;
   const sorted = [...samples].sort((a, b) => a.value - b.value);
   const totalWeight = sorted.reduce((sum, s) => sum + s.weight, 0);
@@ -430,7 +437,10 @@ function weightedMedian(samples: { value: number; weight: number }[]): number | 
 
 function bestLapMedianMs(aggregate: RivalAggregate): number | undefined {
   return weightedMedian(
-    aggregate.bestLapDeltas.map((s) => ({ value: s.deltaMs, weight: s.weight })),
+    aggregate.bestLapDeltas.map((s) => ({
+      value: s.deltaMs,
+      weight: s.weight,
+    })),
   );
 }
 
@@ -450,7 +460,9 @@ function compoundPaceMedianMs(aggregate: RivalAggregate): number | undefined {
   );
 }
 
-function preferredPaceMedian(aggregate: RivalAggregate): PaceMedian | undefined {
+function preferredPaceMedian(
+  aggregate: RivalAggregate,
+): PaceMedian | undefined {
   const compoundMedian = compoundPaceMedianMs(aggregate);
   if (
     compoundMedian != null &&
@@ -465,7 +477,10 @@ function preferredPaceMedian(aggregate: RivalAggregate): PaceMedian | undefined 
   }
 
   const bestLapMedian = bestLapMedianMs(aggregate);
-  if (bestLapMedian == null || aggregate.bestLapDeltas.length < MIN_PACE_RACES) {
+  if (
+    bestLapMedian == null ||
+    aggregate.bestLapDeltas.length < MIN_PACE_RACES
+  ) {
     return undefined;
   }
   return {
@@ -487,9 +502,9 @@ function formatDeltaSeconds(ms: number): string {
  * unambiguous English read of who's faster so the user never has to
  * mentally translate the sign convention.
  */
-function relationToYou(deltaMs: number): "faster than you" | "slower than you" | undefined {
-  if (deltaMs > 0) return "slower than you";
-  if (deltaMs < 0) return "faster than you";
+function relationToYou(deltaMs: number): "slower" | "faster" | undefined {
+  if (deltaMs > 0) return "slower";
+  if (deltaMs < 0) return "faster";
   return undefined;
 }
 
@@ -511,13 +526,14 @@ function buildClosestTeammateCards(aggregates: RivalAggregate[]): RivalCard[] {
       paceMedian != null
         ? formatDeltaSeconds(paceMedian.deltaMs)
         : `${winner.teammateRaces}×`;
-    const detailParts: string[] = [`${winner.teammateRaces} races`];
+    const detailParts: string[] = [];
     if (winner.h2hWinsForPlayer + winner.h2hWinsForRival > 0) {
       detailParts.push(
         `H2H ${winner.h2hWinsForPlayer}-${winner.h2hWinsForRival}`,
       );
     }
-    const relation = paceMedian != null ? relationToYou(paceMedian.deltaMs) : undefined;
+    const relation =
+      paceMedian != null ? relationToYou(paceMedian.deltaMs) : undefined;
     if (relation) detailParts.push(relation);
     return {
       kind: "closest-teammate",
@@ -549,19 +565,16 @@ function buildFrequentRivalCards(aggregates: RivalAggregate[]): RivalCard[] {
   return top.map((winner) => {
     const opponentRaces = winner.races - winner.teammateRaces;
     const paceMedian = preferredPaceMedian(winner);
-    // Use the magnitude + a direction word in the footer ("0.052s faster
-    // than you") so the slim format reads in plain English — no sign
-    // convention to mentally translate.
-    const relation = paceMedian != null ? relationToYou(paceMedian.deltaMs) : undefined;
+    // Use the magnitude + a direction word in the footer ("0.052s faster")
+    // so the slim format reads in plain English — no sign convention to
+    // mentally translate. "Than you" is implied by the card context.
+    const relation =
+      paceMedian != null ? relationToYou(paceMedian.deltaMs) : undefined;
     const gapPhrase =
       paceMedian != null && relation
         ? `${(Math.abs(paceMedian.deltaMs) / 1000).toFixed(3)}s ${relation}`
         : undefined;
-    const detail = [
-      `${winner.races} races`,
-      gapPhrase,
-      `last at ${winner.latestRaceTrack}`,
-    ]
+    const detail = [gapPhrase, `last ${winner.latestRaceTrack}`]
       .filter(Boolean)
       .join(" · ");
     return {
@@ -595,7 +608,7 @@ function buildPaceBenchmarkCards(aggregates: RivalAggregate[]): RivalCard[] {
     const evidence =
       winner.paceMedian.basis === "same-compound pace" &&
       winner.paceMedian.lapSamples
-        ? `${winner.paceMedian.raceSamples} races · ${winner.paceMedian.lapSamples} laps · same tyres`
+        ? `${winner.paceMedian.lapSamples} laps · same tyres`
         : `${winner.paceMedian.raceSamples} races`;
     const basis =
       winner.paceMedian.basis === "same-compound pace"
@@ -640,7 +653,7 @@ function buildMostConsistentRivalCards(
       driverName: winner.name,
       team: winner.latestTeam ?? winner.team,
       headline: `±${avgStddevSec.toFixed(2)}s`,
-      detail: `${winner.stddevSamples} races · avg lap spread`,
+      detail: "avg lap spread",
       sampleSize: winner.stddevSamples,
     };
   });
@@ -673,7 +686,7 @@ function buildOvertakeKingCards(aggregates: RivalAggregate[]): RivalCard[] {
       driverName: winner.name,
       team: winner.latestTeam ?? winner.team,
       headline,
-      detail: `avg overtakes · ${winner.totalOvertakes} total in ${winner.overtakeRaceSamples} races`,
+      detail: `${winner.totalOvertakes} overtakes total`,
       sampleSize: winner.overtakeRaceSamples,
     };
   });
@@ -703,7 +716,7 @@ function buildNemesisCards(aggregates: RivalAggregate[]): RivalCard[] {
       driverName: winner.name,
       team: winner.latestTeam ?? winner.team,
       headline: avgGap < 1 ? avgGap.toFixed(2) : avgGap.toFixed(1),
-      detail: `avg position gap · ${winner.positionGapSamples} races`,
+      detail: "avg position gap",
       sampleSize: winner.positionGapSamples,
     };
   });
@@ -726,33 +739,31 @@ function buildFastestLapKingCards(aggregates: RivalAggregate[]): RivalCard[] {
     driverName: winner.name,
     team: winner.latestTeam ?? winner.team,
     headline: `${winner.fastestLapCount}`,
-    detail:
-      winner.fastestLapCount === 1
-        ? `fastest lap · ${winner.races} races shared`
-        : `fastest laps · ${winner.races} races shared`,
+    detail: winner.fastestLapCount === 1 ? "fastest lap" : "fastest laps",
     sampleSize: winner.fastestLapCount,
   }));
 }
 
 function buildPolePositionKingCards(aggregates: RivalAggregate[]): RivalCard[] {
   const candidates = aggregates.filter((r) => r.polePositions >= 1);
-  const top = takeTop(candidates, MAX_PER_KIND["pole-position-king"], (a, b) => {
-    const ph = placeholderRank(a) - placeholderRank(b);
-    if (ph !== 0) return ph;
-    if (b.weightedPolePositions !== a.weightedPolePositions) {
-      return b.weightedPolePositions - a.weightedPolePositions;
-    }
-    return b.polePositions - a.polePositions;
-  });
+  const top = takeTop(
+    candidates,
+    MAX_PER_KIND["pole-position-king"],
+    (a, b) => {
+      const ph = placeholderRank(a) - placeholderRank(b);
+      if (ph !== 0) return ph;
+      if (b.weightedPolePositions !== a.weightedPolePositions) {
+        return b.weightedPolePositions - a.weightedPolePositions;
+      }
+      return b.polePositions - a.polePositions;
+    },
+  );
   return top.map((winner) => ({
     kind: "pole-position-king",
     driverName: winner.name,
     team: winner.latestTeam ?? winner.team,
     headline: `${winner.polePositions}`,
-    detail:
-      winner.polePositions === 1
-        ? `pole · ${winner.races} races shared`
-        : `poles · ${winner.races} races shared`,
+    detail: winner.polePositions === 1 ? "pole position" : "pole positions",
     sampleSize: winner.polePositions,
   }));
 }
@@ -762,7 +773,8 @@ function buildDnfKingCards(aggregates: RivalAggregate[]): RivalCard[] {
   const top = takeTop(candidates, MAX_PER_KIND["dnf-king"], (a, b) => {
     const ph = placeholderRank(a) - placeholderRank(b);
     if (ph !== 0) return ph;
-    if (b.weightedDnfs !== a.weightedDnfs) return b.weightedDnfs - a.weightedDnfs;
+    if (b.weightedDnfs !== a.weightedDnfs)
+      return b.weightedDnfs - a.weightedDnfs;
     return b.dnfs - a.dnfs;
   });
   return top.map((winner) => {
@@ -867,9 +879,11 @@ export function buildTrackRivalBenchmark(
   scopeKeyFor: (session: SessionSummary) => string,
   trackMatcher: (session: SessionSummary) => boolean,
 ): TrackRivalBenchmark | null {
-  const scoped = getOnlineRaceSessions(sessions, formulaKey, scopeKeyFor).filter(
-    trackMatcher,
-  );
+  const scoped = getOnlineRaceSessions(
+    sessions,
+    formulaKey,
+    scopeKeyFor,
+  ).filter(trackMatcher);
   if (scoped.length === 0) return null;
 
   interface Bench {

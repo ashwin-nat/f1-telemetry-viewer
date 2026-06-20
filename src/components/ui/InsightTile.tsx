@@ -1,13 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { ACCENT_TOKENS, type AccentColor } from "../../constants/accents";
 import { cn } from "../../utils/cn";
-import {
-  ACCENT_TOKENS,
-  accentCardClass,
-  cardHighlight,
-  type AccentColor,
-} from "../Card";
+import { accentCardClass, cardHighlight } from "../Card";
 import { Eyebrow } from "./Eyebrow";
 import { HStack } from "./Stack";
 
@@ -63,10 +59,10 @@ export function InsightTile({
   const content = (
     <>
       {background}
-      <HStack className="relative gap-2">
-        <Icon className={cn("size-3.5", headerColor)} />
+      {badge && <span className="absolute right-3 top-2.5 z-10">{badge}</span>}
+      <HStack className={cn("relative gap-2 mt-0.5", badge && "pr-20")}>
+        <Icon className={cn("size-3", headerColor)} />
         <Eyebrow className={headerColor}>{title}</Eyebrow>
-        {badge && <span className="ml-auto">{badge}</span>}
       </HStack>
       <div className="relative mt-2.5">{children}</div>
     </>

@@ -20,11 +20,8 @@ import {
   resolveFormulaScopeAlias,
   resolveFormulaScopeKey,
   type FormulaScopeOption,
-} from "../utils/dashboardStats";
-import {
-  getFormulaScopeCandidateFromPath,
-  isRootPath,
-} from "../utils/routes";
+} from "../utils/formulaScope";
+import { getFormulaScopeCandidateFromPath, isRootPath } from "../utils/routes";
 
 type Mode = "detecting" | "api" | "demo" | "upload";
 
@@ -47,7 +44,8 @@ const TelemetryContext = createContext<TelemetryContextValue | null>(null);
 
 export function useTelemetry() {
   const ctx = useContext(TelemetryContext);
-  if (!ctx) throw new Error("useTelemetry must be used within TelemetryProvider");
+  if (!ctx)
+    throw new Error("useTelemetry must be used within TelemetryProvider");
   return ctx;
 }
 
@@ -60,9 +58,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
   const [filesLoading, setFilesLoading] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   // In-memory store for upload mode
-  const [sessionStore] = useState(
-    () => new Map<string, TelemetrySession>(),
-  );
+  const [sessionStore] = useState(() => new Map<string, TelemetrySession>());
 
   // API-mode session cache (mirrors the old api/client.ts cache)
   const [apiCache] = useState(

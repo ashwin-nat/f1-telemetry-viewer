@@ -2,43 +2,40 @@ import { Bell, ChevronRight, FolderUp, Menu, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import changelog from "virtual:changelog";
-import { useTelemetry } from "../context/TelemetryContext";
 import {
-  dashboardPath,
-  replaceFormulaScopeInPath,
-  SESSIONS_ROUTE_SEGMENT,
-} from "../utils/routes";
+  CHANGELOG_SEEN_STORAGE_KEY,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+} from "../constants/storage";
+import { SESSIONS_ROUTE_SEGMENT } from "../constants/routes";
+import { useTelemetry } from "../context/TelemetryContext";
+import { cn } from "../utils/cn";
+import { dashboardPath, replaceFormulaScopeInPath } from "../utils/routes";
+import {
+  readStoredNumber,
+  readStoredString,
+  writeStoredString,
+} from "../utils/storage";
 import { AppBrand } from "./AppBrand";
 import { BrandHomeLink } from "./BrandHomeLink";
 import { cardHighlight } from "./Card";
 import { ChangelogModal } from "./ChangelogModal";
 import { SessionList } from "./SessionList";
 import { SegmentedControl } from "./ui/SegmentedControl";
-import { cn } from "../utils/cn";
 
 const MIN_WIDTH = 250;
 const MAX_WIDTH = 480;
 const DEFAULT_WIDTH = 288; // 72 * 4 (w-72)
-const STORAGE_KEY = "sidebar-width";
-const CHANGELOG_SEEN_KEY = "changelog-last-seen";
-
-function getInitialWidth(): number {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) {
-    const n = Number(stored);
-    if (n >= MIN_WIDTH && n <= MAX_WIDTH) return n;
-  }
-  return DEFAULT_WIDTH;
-}
 
 export function Layout() {
-  const {
-    mode,
-    setShowUploadModal,
-    formulaOptions,
-    activeFormulaKey,
-  } = useTelemetry();
-  const [width, setWidth] = useState(getInitialWidth);
+  const { mode, setShowUploadModal, formulaOptions, activeFormulaKey } =
+    useTelemetry();
+  const [width, setWidth] = useState(() =>
+    readStoredNumber(SIDEBAR_WIDTH_STORAGE_KEY, {
+      fallback: DEFAULT_WIDTH,
+      min: MIN_WIDTH,
+      max: MAX_WIDTH,
+    }),
+  );
   const [showChangelog, setShowChangelog] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
@@ -47,7 +44,7 @@ export function Layout() {
   const [hasUnseen, setHasUnseen] = useState(
     () =>
       latestHash !== "" &&
-      localStorage.getItem(CHANGELOG_SEEN_KEY) !== latestHash,
+      readStoredString(CHANGELOG_SEEN_STORAGE_KEY) !== latestHash,
   );
   const dragging = useRef(false);
 
@@ -59,7 +56,7 @@ export function Layout() {
   const openChangelog = useCallback(() => {
     setShowChangelog(true);
     if (latestHash) {
-      localStorage.setItem(CHANGELOG_SEEN_KEY, latestHash);
+      writeStoredString(CHANGELOG_SEEN_STORAGE_KEY, latestHash);
       setHasUnseen(false);
     }
   }, [latestHash]);
@@ -77,7 +74,7 @@ export function Layout() {
     const onMouseUp = (e: MouseEvent) => {
       dragging.current = false;
       const finalWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX));
-      localStorage.setItem(STORAGE_KEY, String(finalWidth));
+      writeStoredString(SIDEBAR_WIDTH_STORAGE_KEY, String(finalWidth));
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
       document.body.style.cursor = "";
@@ -143,7 +140,7 @@ export function Layout() {
         <div className="w-px h-full absolute right-0 top-0 z-99 pointer-events-none bg-[rgba(255,255,255,0.08)]" />
         <div className="p-4">
           <div className="flex items-center justify-between">
-            <BrandHomeLink className="text-[15px] font-bold tracking-tight" />
+            <BrandHomeLink className="text-md font-bold tracking-tight" />
             <div className="flex items-center gap-1">
               <button
                 onClick={openChangelog}
@@ -210,7 +207,7 @@ export function Layout() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <BrandHomeLink className="text-[15px] font-bold tracking-tight" />
+          <BrandHomeLink className="text-md font-bold tracking-tight" />
         </div>
 
         {mode === "demo" && (

@@ -1,36 +1,15 @@
 import type { CarSetup } from "../types/telemetry";
+import { CAR_SETUP_RANGES } from "../constants/setup";
+import { Eyebrow } from "./ui/Eyebrow";
+import { SectionHeader } from "./ui/SectionHeader";
 import { HStack, VStack } from "./ui/Stack";
 
 interface CarSetupCardProps {
   setup: CarSetup;
 }
 
-// Min/max ranges for F1 setup parameters (based on F1 24)
-const RANGES: Record<string, [number, number]> = {
-  "front-wing": [0, 50],
-  "rear-wing": [0, 50],
-  "on-throttle": [50, 100],
-  "off-throttle": [50, 100],
-  "front-camber": [-3.5, -2.5],
-  "rear-camber": [-2.0, -1.0],
-  "front-toe": [0.0, 0.5],
-  "rear-toe": [0.0, 0.5],
-  "front-suspension": [1, 41],
-  "rear-suspension": [1, 41],
-  "front-anti-roll-bar": [1, 21],
-  "rear-anti-roll-bar": [1, 21],
-  "front-suspension-height": [1, 50],
-  "rear-suspension-height": [1, 75],
-  "brake-pressure": [80, 100],
-  "brake-bias": [50, 70],
-  "front-left-tyre-pressure": [21.0, 30.0],
-  "front-right-tyre-pressure": [21.0, 30.0],
-  "rear-left-tyre-pressure": [19.5, 27.0],
-  "rear-right-tyre-pressure": [19.5, 27.0],
-};
-
 function getRangePercent(key: string, value: number): number {
-  const range = RANGES[key];
+  const range = CAR_SETUP_RANGES[key];
   if (!range) return 50;
   const [min, max] = range;
   if (max === min) return 50;
@@ -42,12 +21,9 @@ function formatValue(key: string, value: number): string {
   if (key.includes("camber") || key.includes("toe"))
     return `${value.toFixed(1)}°`;
   if (
-    [
-      "on-throttle",
-      "off-throttle",
-      "brake-pressure",
-      "brake-bias",
-    ].includes(key)
+    ["on-throttle", "off-throttle", "brake-pressure", "brake-bias"].includes(
+      key,
+    )
   )
     return `${value}%`;
   return String(value);
@@ -94,8 +70,8 @@ function Section({
 }) {
   return (
     <div>
-      <div className="text-2xs uppercase tracking-wider text-zinc-400 font-medium mb-2">
-        {title}
+      <div className="mb-2">
+        <Eyebrow className="text-zinc-400">{title}</Eyebrow>
       </div>
       <div className="space-y-1.5">{children}</div>
     </div>
@@ -113,8 +89,11 @@ function TyrePressureCell({
 }) {
   const pct = getRangePercent(setupKey, value);
   return (
-    <VStack align="center" className="gap-1 rounded-lg bg-zinc-800/40 px-3 py-2.5">
-      <span className="text-2xs text-zinc-500 uppercase tracking-wider">
+    <VStack
+      align="center"
+      className="gap-1 rounded-lg bg-zinc-800/40 px-3 py-2.5"
+    >
+      <span className="font-mono text-2xs uppercase tracking-wider text-zinc-500">
         {label}
       </span>
       <span className="font-mono text-sm font-medium text-zinc-200">
@@ -140,7 +119,7 @@ export function CarSetupCard({ setup }: CarSetupCardProps) {
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-zinc-300 mb-4">Car Setup</h3>
+      <SectionHeader size="sm" title="Car Setup" className="mb-4" />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-5">
         {/* Column 1: Aero + Transmission + Brakes */}
         <div className="space-y-5">
@@ -269,7 +248,6 @@ export function CarSetupCard({ setup }: CarSetupCardProps) {
               />
             </div>
           </Section>
-
         </div>
       </div>
     </div>

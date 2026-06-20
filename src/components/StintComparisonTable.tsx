@@ -1,15 +1,16 @@
 import type { DriverData } from "../types/telemetry";
-import {
-  stintWearRate,
-  getBestDriverOnCompound,
-  medianPaceInRange,
-  paceDrop,
-  getDriverStints,
-} from "../utils/stats";
+import { buildStintComparisonRows } from "../analysis/resultsAnalysis";
 import { msToLapTime } from "../utils/format";
-import { getCompoundColor } from "../utils/colors";
 import { cn } from "../utils/cn";
-import { tableHeadClass, tableRowClass } from "./ui/table";
+import { CompoundSwatchLabel } from "./ui/CompoundSwatchLabel";
+import { SectionHeader } from "./ui/SectionHeader";
+import {
+  tableCellClass,
+  tableClass,
+  tableHeadCellClass,
+  tableHeadClass,
+  tableRowClass,
+} from "./ui/table";
 
 interface StintComparisonTableProps {
   player: DriverData;
@@ -24,121 +25,99 @@ export function StintComparisonTable({
   player,
   allDrivers,
 }: StintComparisonTableProps) {
-  const stints = getDriverStints(player);
-  const playerLaps = player["session-history"]["lap-history-data"];
-  const others = allDrivers.filter((d) => d.index !== player.index);
-
-  if (!stints.length) return null;
+  const rows = buildStintComparisonRows({ player, allDrivers });
+  if (!rows.length) return null;
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-zinc-300 mb-2">
-        Stint Comparison{" "}
-        <span className="font-normal text-zinc-500">vs best on compound</span>
-      </h3>
+      <SectionHeader
+        size="sm"
+        title="Stint Comparison"
+        hint="vs best on compound"
+      />
       <div className="overflow-x-auto">
-        <table className="w-full text-xs min-w-[520px]">
+        <table className={cn(tableClass, "min-w-[520px]")}>
           <thead className={tableHeadClass}>
             <tr>
-              <th className="text-left py-1.5 px-2">Stint</th>
-              <th className="text-left py-1.5 px-2">Compound</th>
-              <th className="text-right py-1.5 px-2">Laps</th>
-              <th className="text-right py-1.5 px-2">Median Pace</th>
-              <th className="text-right py-1.5 px-2">Wear/Lap</th>
-              <th className="text-right py-1.5 px-2">Pace Drop</th>
-              <th className="text-left py-1.5 px-2">vs Best</th>
+              <th className={tableHeadCellClass()}>Stint</th>
+              <th className={tableHeadCellClass()}>Compound</th>
+              <th className={tableHeadCellClass({ align: "right" })}>Laps</th>
+              <th className={tableHeadCellClass({ align: "right" })}>
+                Median Pace
+              </th>
+              <th className={tableHeadCellClass({ align: "right" })}>
+                Wear/Lap
+              </th>
+              <th className={tableHeadCellClass({ align: "right" })}>
+                Pace Drop
+              </th>
+              <th className={tableHeadCellClass()}>vs Best</th>
             </tr>
           </thead>
           <tbody>
-            {stints.map((stint, i) => {
-              const compound =
-                stint["tyre-set-data"]["visual-tyre-compound"];
-              const playerRate = stintWearRate(stint);
-              const best = getBestDriverOnCompound(
-                others,
-                compound,
-                stint["start-lap"],
-                stint["end-lap"],
-              );
-
-              const compareStartLap = best?.lapStart ?? stint["start-lap"];
-              const compareEndLap = best?.lapEnd ?? stint["end-lap"];
-              const playerPace = medianPaceInRange(
-                playerLaps,
-                compareStartLap,
-                compareEndLap,
-              );
-              const playerDrop = paceDrop(
-                playerLaps,
-                compareStartLap,
-                compareEndLap,
-              );
-
-              const bestPace = best?.paceMs ?? 0;
-              const bestDrop = best
-                ? paceDrop(
-                    best.driver["session-history"]["lap-history-data"],
-                    best.lapStart,
-                    best.lapEnd,
-                  )
-                : 0;
-
-              const wearDelta =
-                best && playerRate > 0 && best.wearRate > 0
-                  ? playerRate - best.wearRate
-                  : 0;
-              const paceDelta =
-                playerPace > 0 && bestPace > 0 ? playerPace - bestPace : 0;
-              const dropDelta =
-                playerDrop !== 0 && bestDrop !== 0 ? playerDrop - bestDrop : 0;
-
+            {rows.map((row) => {
               return (
-                <tr
-                  key={i}
-                  className={tableRowClass}
-                >
-                  <td className="py-1.5 px-2 font-medium text-zinc-300">
-                    {i + 1}
+                <tr key={row.stintNumber} className={tableRowClass}>
+                  <td
+                    className={tableCellClass({
+                      className: "font-medium text-zinc-300",
+                    })}
+                  >
+                    {row.stintNumber}
                   </td>
-                  <td className="py-1.5 px-2">
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className="w-2 h-2 rounded-sm inline-block"
-                        style={{ backgroundColor: getCompoundColor(compound) }}
-                      />
-                      <span className="text-zinc-300">{compound}</span>
-                    </span>
+                  <td className={tableCellClass()}>
+                    <CompoundSwatchLabel compound={row.compound} />
                   </td>
-                  <td className="text-right py-1.5 px-2 text-zinc-300 font-mono">
-                    {stint["stint-length"]}
+                  <td
+                    className={tableCellClass({
+                      align: "right",
+                      mono: true,
+                      className: "text-zinc-300",
+                    })}
+                  >
+                    {row.stint["stint-length"]}
                   </td>
-                  <td className="text-right py-1.5 px-2 font-mono">
+                  <td
+                    className={tableCellClass({ align: "right", mono: true })}
+                  >
                     <span className="text-zinc-300">
-                      {playerPace > 0 ? msToLapTime(playerPace) : "–"}
+                      {row.playerPace > 0 ? msToLapTime(row.playerPace) : "–"}
                     </span>
-                    {paceDelta !== 0 && (
-                      <Delta value={paceDelta} unit="s" factor={1000} />
+                    {row.paceDelta !== 0 && (
+                      <Delta value={row.paceDelta} unit="s" factor={1000} />
                     )}
                   </td>
-                  <td className="text-right py-1.5 px-2 font-mono">
+                  <td
+                    className={tableCellClass({ align: "right", mono: true })}
+                  >
                     <span className="text-zinc-300">
-                      {playerRate > 0 ? `${playerRate.toFixed(1)}%` : "–"}
-                    </span>
-                    {wearDelta !== 0 && <Delta value={wearDelta} unit="%" />}
-                  </td>
-                  <td className="text-right py-1.5 px-2 font-mono">
-                    <span className="text-zinc-300">
-                      {playerDrop !== 0
-                        ? `${playerDrop > 0 ? "+" : ""}${(playerDrop / 1000).toFixed(3)}s`
+                      {row.playerWearRate > 0
+                        ? `${row.playerWearRate.toFixed(1)}%`
                         : "–"}
                     </span>
-                    {dropDelta !== 0 && (
-                      <Delta value={dropDelta} unit="s" factor={1000} />
+                    {row.wearDelta !== 0 && (
+                      <Delta value={row.wearDelta} unit="%" />
                     )}
                   </td>
-                  <td className="text-left py-1.5 px-2 text-zinc-500 text-2xs">
-                    {best
-                      ? `${best.driver["driver-name"]} L${best.lapStart}-${best.lapEnd}`
+                  <td
+                    className={tableCellClass({ align: "right", mono: true })}
+                  >
+                    <span className="text-zinc-300">
+                      {row.playerDrop !== 0
+                        ? `${row.playerDrop > 0 ? "+" : ""}${(row.playerDrop / 1000).toFixed(3)}s`
+                        : "–"}
+                    </span>
+                    {row.dropDelta !== 0 && (
+                      <Delta value={row.dropDelta} unit="s" factor={1000} />
+                    )}
+                  </td>
+                  <td
+                    className={tableCellClass({
+                      className: "text-2xs text-zinc-500",
+                    })}
+                  >
+                    {row.bestDriverName
+                      ? `${row.bestDriverName} L${row.bestLapStart}-${row.bestLapEnd}`
                       : "–"}
                   </td>
                 </tr>

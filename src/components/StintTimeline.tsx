@@ -1,10 +1,15 @@
 import type { TyreStint, LapHistoryEntry } from "../types/telemetry";
+import {
+  buildStintDetails,
+  buildStintTimelineSegments,
+} from "../analysis/stintAnalysis";
 import { getCompoundColor } from "../utils/colors";
 import { cn } from "../utils/cn";
 import { stintChipStyle, stintChipTextStyle } from "./ui/StintChip";
-import { stintWearRate, getWorstWheelWear, estimateMaxLife, PUNCTURE_THRESHOLD } from "../utils/stats";
-import { msToLapTime, isLapValid } from "../utils/format";
+import { PUNCTURE_THRESHOLD } from "../utils/stats/tyres";
+import { msToLapTime } from "../utils/format";
 import { CompoundStatCard } from "./CompoundStatCard";
+import { SectionHeader } from "./ui/SectionHeader";
 
 interface StintTimelineProps {
   stints: TyreStint[];
@@ -20,43 +25,37 @@ export function StintTimeline({ stints, totalLaps }: StintTimelineProps) {
     return <p className="text-sm text-zinc-500">No stint data available.</p>;
   }
 
-  const effectiveTotal =
-    totalLaps || stints.reduce((s, t) => s + t["stint-length"], 0);
+  const segments = buildStintTimelineSegments(stints, totalLaps);
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-zinc-300 mb-2">
-        Stint Analysis
-      </h3>
+      <SectionHeader size="sm" title="Stint Analysis" />
       <div className="flex h-10 gap-0.5">
-        {stints.map((stint, i) => {
-          const compound = stint["tyre-set-data"]["visual-tyre-compound"];
-          const widthPct = (stint["stint-length"] / effectiveTotal) * 100;
-          const isLastUnfinished =
-            i === stints.length - 1 && stint["end-lap"] < totalLaps;
-          const isFirst = i === 0;
-          const isLast = i === stints.length - 1;
-
+        {segments.map((segment, i) => {
+          const { stint, compound } = segment;
           return (
             <div
               key={i}
               className={cn(
                 "flex items-center justify-center overflow-hidden text-xs font-bold relative",
-                isFirst && "rounded-l-lg",
-                isLast && "rounded-r-lg",
+                segment.isFirst && "rounded-l-lg",
+                segment.isLast && "rounded-r-lg",
               )}
               style={{
-                width: `${widthPct}%`,
+                width: `${segment.widthPct}%`,
                 ...stintChipStyle(compound),
                 minWidth: "40px",
-                ...(isLastUnfinished && {
+                ...(segment.isLastUnfinished && {
                   maskImage:
                     "linear-gradient(to right, black 90%, transparent)",
                 }),
               }}
               title={`${compound}: Laps ${stint["start-lap"]}–${stint["end-lap"]} (${stint["stint-length"]} laps)`}
             >
-              <span className="truncate px-1" style={stintChipTextStyle(compound)}>
+              <span
+                className="truncate px-1"
+                style={stintChipTextStyle(compound)}
+              >
                 {compound[0]} · L{stint["start-lap"]}–{stint["end-lap"]}
               </span>
             </div>
@@ -88,85 +87,99 @@ export function StintTimeline({ stints, totalLaps }: StintTimelineProps) {
  * Stint detail cards showing pace stats and wear-based estimated max life.
  * Placed below the tyre wear chart for context.
  */
-export function StintDetailCards({ stints, laps }: { stints: TyreStint[]; laps: LapHistoryEntry[] }) {
+export function StintDetailCards({
+  stints,
+  laps,
+}: {
+  stints: TyreStint[];
+  laps: LapHistoryEntry[];
+}) {
   if (stints.length === 0) return null;
 
-  // Build valid-lap data indexed by lap number (1-based)
-  const validLapsByNum = new Map<number, number>();
-  let lapNum = 0;
-  for (const l of laps) {
-    if (l["lap-time-in-ms"] > 0) {
-      lapNum++;
-      if (isLapValid(l["lap-valid-bit-flags"])) {
-        validLapsByNum.set(lapNum, l["lap-time-in-ms"]);
-      }
-    }
-  }
-
-  const hasAnyWear = stints.some((s) => stintWearRate(s) > 0);
+  const details = buildStintDetails(stints, laps);
+  const hasAnyWear = details.some((detail) => detail.wearRate > 0);
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-zinc-300 mb-2">
-        Stints
-      </h3>
+      <SectionHeader size="sm" title="Stints" />
       <div
         className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid"
-        style={{ gridTemplateColumns: `repeat(${stints.length}, minmax(0, 1fr))` }}
+        style={{
+          gridTemplateColumns: `repeat(${stints.length}, minmax(0, 1fr))`,
+        }}
       >
-        {stints.map((stint, i) => {
-          const compound = stint["tyre-set-data"]["visual-tyre-compound"];
+        {details.map((detail, i) => {
+          const { stint, compound } = detail;
           const color = getCompoundColor(compound);
-          const wearHistory = stint["tyre-wear-history"];
-          const peakWear = wearHistory.length > 0 ? getWorstWheelWear(wearHistory[wearHistory.length - 1]) : 0;
-          const wearRate = stintWearRate(stint);
-          const estLife = estimateMaxLife(wearRate);
 
-          // Compute per-stint lap time stats (valid laps only, skip first lap of each stint after pit)
-          const stintTimes: number[] = [];
-          const stintTimesWithOutlap: number[] = [];
-          for (let lap = stint["start-lap"]; lap <= stint["end-lap"]; lap++) {
-            const ms = validLapsByNum.get(lap);
-            if (ms != null) {
-              stintTimesWithOutlap.push(ms);
-              // Skip the in-lap (first lap after a pit stop) for non-first stints
-              if (i > 0 && lap === stint["start-lap"]) continue;
-              stintTimes.push(ms);
-            }
-          }
-          // Fall back to including the out-lap if skipping it leaves no data
-          const effectiveTimes = stintTimes.length > 0 ? stintTimes : stintTimesWithOutlap;
-
-          const bestTimeMs = effectiveTimes.length > 0 ? Math.min(...effectiveTimes) : 0;
-          const avgTimeMs = effectiveTimes.length > 0 ? effectiveTimes.reduce((a, b) => a + b, 0) / effectiveTimes.length : 0;
-          const avgDevMs = effectiveTimes.length > 1
-            ? effectiveTimes.reduce((sum, t) => sum + Math.abs(t - avgTimeMs), 0) / effectiveTimes.length
-            : 0;
-
-          const hero = bestTimeMs > 0 ? { value: msToLapTime(bestTimeMs), label: "Best lap" } : undefined;
+          const hero =
+            detail.bestTimeMs > 0
+              ? { value: msToLapTime(detail.bestTimeMs), label: "Best lap" }
+              : undefined;
 
           const rows = [
-            ...(avgTimeMs > 0 ? [{ label: "Average", value: msToLapTime(Math.round(avgTimeMs)), className: "font-mono" }] : []),
-            ...(avgDevMs > 0 ? [{ label: "Consistency", value: `±${(avgDevMs / 1000).toFixed(3)}s`, className: "font-mono" }] : []),
-            ...(peakWear > 0 ? [{
-              label: "Peak wear",
-              value: `${peakWear.toFixed(1)}%`,
-              className: `font-mono ${peakWear > 60 ? "text-behind" : peakWear > 40 ? "text-warning" : "text-zinc-300"}`,
-              divider: true,
-            }] : []),
-            ...(wearRate > 0 ? [{ label: "Wear rate", value: `${wearRate.toFixed(1)}%/lap` }] : []),
-            ...(estLife > 0 ? [{ label: "Est. max life", value: `~${estLife} laps` }] : []),
+            ...(detail.averageTimeMs > 0
+              ? [
+                  {
+                    label: "Average",
+                    value: msToLapTime(Math.round(detail.averageTimeMs)),
+                    className: "font-mono",
+                  },
+                ]
+              : []),
+            ...(detail.averageDeviationMs > 0
+              ? [
+                  {
+                    label: "Consistency",
+                    value: `±${(detail.averageDeviationMs / 1000).toFixed(3)}s`,
+                    className: "font-mono",
+                  },
+                ]
+              : []),
+            ...(detail.peakWear > 0
+              ? [
+                  {
+                    label: "Peak wear",
+                    value: `${detail.peakWear.toFixed(1)}%`,
+                    className: `font-mono ${detail.peakWear > 60 ? "text-behind" : detail.peakWear > 40 ? "text-warning" : "text-zinc-300"}`,
+                    divider: true,
+                  },
+                ]
+              : []),
+            ...(detail.wearRate > 0
+              ? [
+                  {
+                    label: "Wear rate",
+                    value: `${detail.wearRate.toFixed(1)}%/lap`,
+                  },
+                ]
+              : []),
+            ...(detail.estimatedLife > 0
+              ? [
+                  {
+                    label: "Est. max life",
+                    value: `~${detail.estimatedLife} laps`,
+                  },
+                ]
+              : []),
           ];
 
           return (
-            <CompoundStatCard key={i} compound={compound} subtitle={`${stint["stint-length"]} laps`} hero={hero} rows={rows} className="min-w-[200px] sm:min-w-0">
+            <CompoundStatCard
+              key={i}
+              compound={compound}
+              subtitle={`${stint["stint-length"]} laps`}
+              hero={hero}
+              rows={rows}
+              className="min-w-[200px] sm:min-w-0"
+            >
               {/* Wear bar: 0–100% scale with puncture threshold marker */}
               {hasAnyWear && (
                 <div className="relative h-2 rounded-full bg-zinc-800 mt-1.5">
                   <div
                     className="absolute inset-y-0 left-0 rounded-full"
                     style={{
-                      width: `${Math.min(peakWear, 100)}%`,
+                      width: `${Math.min(detail.peakWear, 100)}%`,
                       backgroundColor: color,
                     }}
                   />
@@ -183,7 +196,9 @@ export function StintDetailCards({ stints, laps }: { stints: TyreStint[]; laps: 
       </div>
       {hasAnyWear && (
         <p className="text-xs text-zinc-600 mt-1.5">
-          Bar = worst-wheel wear. <span className="text-red-500/60">Red line</span> = {PUNCTURE_THRESHOLD}% puncture risk threshold.
+          Bar = worst-wheel wear.{" "}
+          <span className="text-red-500/60">Red line</span> ={" "}
+          {PUNCTURE_THRESHOLD}% puncture risk threshold.
         </p>
       )}
     </div>

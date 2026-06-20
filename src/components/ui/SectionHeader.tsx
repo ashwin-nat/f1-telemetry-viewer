@@ -11,23 +11,36 @@ export function SectionHeader({
   title,
   hint,
   action,
+  size = "md",
   className = "",
 }: {
   title: ReactNode;
   hint?: ReactNode;
   action?: ReactNode;
+  size?: "sm" | "md";
   className?: string;
 }) {
+  const titleClassName =
+    size === "sm"
+      ? "text-sm font-semibold text-zinc-300"
+      : "text-lg font-semibold text-zinc-100";
+  const containerClassName = size === "sm" ? "mb-2" : "mb-3";
+
   return (
     <div
       className={cn(
-        "mb-3 flex flex-wrap items-end justify-between gap-x-3 gap-y-2",
+        "flex flex-wrap items-end justify-between gap-x-3 gap-y-2",
+        containerClassName,
         className,
       )}
     >
       <div className="min-w-0">
-        <h3 className="text-base font-semibold text-zinc-100">{title}</h3>
-        {hint && <p className="mt-0.5 text-xs text-zinc-500">{hint}</p>}
+        <h3 className={titleClassName}>{title}</h3>
+        {hint && (
+          <p className="mt-0.5 font-mono text-xs tabular-nums text-zinc-500">
+            {hint}
+          </p>
+        )}
       </div>
       {action}
     </div>

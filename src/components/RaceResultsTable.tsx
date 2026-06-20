@@ -1,15 +1,34 @@
 import { useState, useMemo } from "react";
+import {
+  buildFallbackRaceRows,
+  buildPenaltiesByDriver,
+  buildRaceDriverStats,
+  buildRaceResultHighlights,
+  formatRaceGap,
+  formatRaceStrategy,
+  sortRaceStintHistoryRows,
+  type RaceResultSortKey,
+  type SortDirection,
+} from "../analysis/resultsAnalysis";
 import type { RaceControlEvent, TelemetrySession } from "../types/telemetry";
 import { getTeamColor, getTeamName } from "../utils/colors";
 import { msToLapTime } from "../utils/format";
-import { getCleanRaceLaps, getBestLapTime, driverTopSpeed, avgErsDeployMj, avgErsHarvestMj, getCompletedStints, RACE_PACE_TOOLTIP } from "../utils/stats";
+import { driverTopSpeed } from "../utils/stats/drivers";
+import { RACE_PACE_TOOLTIP } from "../utils/stats/insightTypes";
 import { usePlayerOnly } from "../hooks/usePlayerOnly";
 import { cn } from "../utils/cn";
 import { AlertTriangle, ChevronUp, ChevronDown } from "lucide-react";
 import { Tooltip } from "./Tooltip";
 import { Badge } from "./ui/Badge";
 import { FocusToggle } from "./ui/FocusToggle";
-import { tableHeadClass, tableRowClass } from "./ui/table";
+import { SectionHeader } from "./ui/SectionHeader";
+import {
+  tableCellClass,
+  tableClass,
+  tableHeadCellClass,
+  tableHeadClass,
+  tableRowClass,
+} from "./ui/table";
 import { formatPenaltySummary } from "../utils/raceControl";
 
 interface RaceResultsTableProps {
@@ -18,15 +37,33 @@ interface RaceResultsTableProps {
   raceControlEvents?: RaceControlEvent[];
 }
 
-type SortKey = "pos" | "bestLap" | "racePace" | "gap" | "topSpeed" | "ers" | "ersHarv";
-type SortDir = "asc" | "desc";
-
-function SortIcon({ column, sortKey, sortDir, side = "right" }: { column: SortKey; sortKey: SortKey; sortDir: SortDir; side?: "left" | "right" }) {
+function SortIcon({
+  column,
+  sortKey,
+  sortDir,
+  side = "right",
+}: {
+  column: RaceResultSortKey;
+  sortKey: RaceResultSortKey;
+  sortDir: SortDirection;
+  side?: "left" | "right";
+}) {
   const margin = side === "left" ? "mr-1" : "ml-1";
-  if (column !== sortKey) return <ChevronDown className={cn("inline w-3 h-3", margin, "opacity-0 group-hover:opacity-30")} />;
-  return sortDir === "asc"
-    ? <ChevronDown className={cn("inline w-3 h-3", margin, "text-active")} />
-    : <ChevronUp className={cn("inline w-3 h-3", margin, "text-active")} />;
+  if (column !== sortKey)
+    return (
+      <ChevronDown
+        className={cn(
+          "inline w-3 h-3",
+          margin,
+          "opacity-0 group-hover:opacity-30",
+        )}
+      />
+    );
+  return sortDir === "asc" ? (
+    <ChevronDown className={cn("inline w-3 h-3", margin, "text-active")} />
+  ) : (
+    <ChevronUp className={cn("inline w-3 h-3", margin, "text-active")} />
+  );
 }
 
 /**
@@ -39,106 +76,33 @@ export function RaceResultsTable({
   raceControlEvents = [],
 }: RaceResultsTableProps) {
   const [focusedOnly, toggleFocusedOnly] = usePlayerOnly();
-  const [sortKey, setSortKey] = useState<SortKey>("pos");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useState<RaceResultSortKey>("pos");
+  const [sortDir, setSortDir] = useState<SortDirection>("asc");
   const stintHistory = session["tyre-stint-history-v2"];
   const drivers = session["classification-data"];
 
   const focusedDriver = drivers.find((d) => d.index === focusedDriverIndex);
   const focusedName = focusedDriver?.["driver-name"];
 
-  // Pre-compute race pace and best lap for each driver (by name)
-  const driverStats = useMemo(() => {
-    const map = new Map<string, { bestLap: number; racePace: number; topSpeed: number; ers: number; ersHarv: number }>();
-    for (const d of drivers) {
-      const laps = d["session-history"]["lap-history-data"];
-      const bestLap = getBestLapTime(laps);
-      const clean = getCleanRaceLaps(d);
-      const racePace = clean.length > 0
-        ? clean.reduce((s, l) => s + l["lap-time-in-ms"], 0) / clean.length
-        : 0;
-      const topSpeed = driverTopSpeed(d);
-      const ers = avgErsDeployMj(d);
-      const ersHarv = avgErsHarvestMj(d);
-      map.set(d["driver-name"], { bestLap, racePace, topSpeed, ers, ersHarv });
-    }
-    return map;
-  }, [drivers]);
-
-  const penaltiesByDriver = useMemo(() => {
-    const map = new Map<string, RaceControlEvent[]>();
-    for (const event of raceControlEvents) {
-      if (event["message-type"] !== "PENALTY" || !event["driver-info"]?.name) {
-        continue;
-      }
-      const driverName = event["driver-info"].name;
-      const penalties = map.get(driverName) ?? [];
-      penalties.push(event);
-      map.set(driverName, penalties);
-    }
-    return map;
-  }, [raceControlEvents]);
-
-  const filteredStintHistory = useMemo(() => {
-    if (!stintHistory?.length) return [];
-    return focusedOnly
-      ? stintHistory.filter((entry) => entry.name === focusedName)
-      : stintHistory;
-  }, [focusedName, focusedOnly, stintHistory]);
+  const driverStats = useMemo(() => buildRaceDriverStats(drivers), [drivers]);
+  const penaltiesByDriver = useMemo(
+    () => buildPenaltiesByDriver(raceControlEvents),
+    [raceControlEvents],
+  );
 
   const sortedStintHistory = useMemo(() => {
-    const arr = [...filteredStintHistory];
-    arr.sort((a, b) => {
-      const statsA = driverStats.get(a.name);
-      const statsB = driverStats.get(b.name);
-      let cmp = 0;
-      switch (sortKey) {
-        case "pos":
-          cmp = (a.position ?? 99) - (b.position ?? 99);
-          break;
-        case "bestLap": {
-          const la = statsA?.bestLap || Infinity;
-          const lb = statsB?.bestLap || Infinity;
-          cmp = la - lb;
-          break;
-        }
-        case "racePace": {
-          const pa = statsA?.racePace || Infinity;
-          const pb = statsB?.racePace || Infinity;
-          cmp = pa - pb;
-          break;
-        }
-        case "topSpeed": {
-          const sa = statsA?.topSpeed || 0;
-          const sb = statsB?.topSpeed || 0;
-          cmp = sb - sa;
-          break;
-        }
-        case "ers": {
-          const ea = statsA?.ers || 0;
-          const eb = statsB?.ers || 0;
-          cmp = eb - ea;
-          break;
-        }
-        case "ersHarv": {
-          const ha = statsA?.ersHarv || 0;
-          const hb = statsB?.ersHarv || 0;
-          cmp = hb - ha;
-          break;
-        }
-        case "gap": {
-          const ga = typeof a["delta-to-leader"] === "number" ? a["delta-to-leader"] : 0;
-          const gb = typeof b["delta-to-leader"] === "number" ? b["delta-to-leader"] : 0;
-          cmp = ga - gb;
-          break;
-        }
-      }
-      return sortDir === "desc" ? -cmp : cmp;
+    if (!stintHistory?.length) return [];
+    return sortRaceStintHistoryRows({
+      entries: stintHistory,
+      focusedOnly,
+      focusedName,
+      sortKey,
+      sortDir,
+      driverStats,
     });
-    return arr;
-  }, [filteredStintHistory, sortKey, sortDir, driverStats]);
+  }, [driverStats, focusedName, focusedOnly, sortDir, sortKey, stintHistory]);
 
-  function toggleSort(key: SortKey) {
+  function toggleSort(key: RaceResultSortKey) {
     if (sortKey === key) {
       if (sortDir === "asc") {
         setSortDir("desc");
@@ -153,81 +117,131 @@ export function RaceResultsTable({
     }
   }
 
-  const thClass = "py-1.5 px-2 cursor-pointer select-none group";
+  const thClass = (align: "left" | "right" = "left") =>
+    tableHeadCellClass({ align, sortable: true });
 
   // Use tyre-stint-history-v2 if available (has clean per-driver race results)
   if (stintHistory?.length) {
-    // Find best values for highlighting
-    const bestLapMs = Math.min(...[...driverStats.values()].map((s) => s.bestLap).filter((v) => v > 0));
-    const bestPaceMs = Math.min(...[...driverStats.values()].map((s) => s.racePace).filter((v) => v > 0));
-    const bestSpeedKmh = Math.max(...[...driverStats.values()].map((s) => s.topSpeed));
-    const bestErs = Math.max(...[...driverStats.values()].map((s) => s.ers));
-    const bestErsHarv = Math.max(...[...driverStats.values()].map((s) => s.ersHarv));
-    const hasErsHarv = [...driverStats.values()].some((s) => s.ersHarv > 0);
+    const highlights = buildRaceResultHighlights(driverStats);
 
     return (
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-zinc-300">Classification</h3>
-          <FocusToggle value={focusedOnly} onChange={toggleFocusedOnly} />
-        </div>
+        <SectionHeader
+          size="sm"
+          title="Classification"
+          action={
+            <FocusToggle value={focusedOnly} onChange={toggleFocusedOnly} />
+          }
+        />
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className={tableClass}>
             <thead className={tableHeadClass}>
               <tr>
-                <th className={cn("text-left", thClass)} onClick={() => toggleSort("pos")}>
-                  Pos<SortIcon column="pos" sortKey={sortKey} sortDir={sortDir} />
+                <th className={thClass()} onClick={() => toggleSort("pos")}>
+                  Pos
+                  <SortIcon column="pos" sortKey={sortKey} sortDir={sortDir} />
                 </th>
-                <th className="text-left py-1.5 px-2">Driver</th>
-                <th className="text-left py-1.5 px-2">Team</th>
-                <th className={cn("text-right", thClass)} onClick={() => toggleSort("gap")}>
-                  <SortIcon column="gap" sortKey={sortKey} sortDir={sortDir} side="left" />Gap
+                <th className={tableHeadCellClass()}>Driver</th>
+                <th className={tableHeadCellClass()}>Team</th>
+                <th
+                  className={thClass("right")}
+                  onClick={() => toggleSort("gap")}
+                >
+                  <SortIcon
+                    column="gap"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    side="left"
+                  />
+                  Gap
                 </th>
-                <th className={cn("text-right", thClass)} onClick={() => toggleSort("bestLap")}>
-                  <SortIcon column="bestLap" sortKey={sortKey} sortDir={sortDir} side="left" />Best Lap
+                <th
+                  className={thClass("right")}
+                  onClick={() => toggleSort("bestLap")}
+                >
+                  <SortIcon
+                    column="bestLap"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    side="left"
+                  />
+                  Best Lap
                 </th>
-                <th className={cn("text-right", thClass)} onClick={() => toggleSort("racePace")}>
+                <th
+                  className={thClass("right")}
+                  onClick={() => toggleSort("racePace")}
+                >
                   <Tooltip text={RACE_PACE_TOOLTIP}>
-                    <span><SortIcon column="racePace" sortKey={sortKey} sortDir={sortDir} side="left" />Race Pace</span>
+                    <span>
+                      <SortIcon
+                        column="racePace"
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                        side="left"
+                      />
+                      Race Pace
+                    </span>
                   </Tooltip>
                 </th>
-                <th className={cn("text-right", thClass)} onClick={() => toggleSort("topSpeed")}>
-                  <SortIcon column="topSpeed" sortKey={sortKey} sortDir={sortDir} side="left" />Top Speed
+                <th
+                  className={thClass("right")}
+                  onClick={() => toggleSort("topSpeed")}
+                >
+                  <SortIcon
+                    column="topSpeed"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    side="left"
+                  />
+                  Top Speed
                 </th>
-                <th className={cn("text-right", thClass)} onClick={() => toggleSort("ers")}>
+                <th
+                  className={thClass("right")}
+                  onClick={() => toggleSort("ers")}
+                >
                   <Tooltip text="Average ERS energy deployed per lap (green-flag laps only, excluding first and last lap).">
-                    <span><SortIcon column="ers" sortKey={sortKey} sortDir={sortDir} side="left" />ERS Dep</span>
+                    <span>
+                      <SortIcon
+                        column="ers"
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                        side="left"
+                      />
+                      ERS Dep
+                    </span>
                   </Tooltip>
                 </th>
-                {hasErsHarv && (
-                  <th className={cn("text-right", thClass)} onClick={() => toggleSort("ersHarv")}>
+                {highlights.hasErsHarv && (
+                  <th
+                    className={thClass("right")}
+                    onClick={() => toggleSort("ersHarv")}
+                  >
                     <Tooltip text="Average ERS energy harvested per lap, MGU-K + MGU-H combined (green-flag laps only, excluding first and last lap). Higher values indicate more lift-and-coast.">
-                      <span><SortIcon column="ersHarv" sortKey={sortKey} sortDir={sortDir} side="left" />ERS Harv</span>
+                      <span>
+                        <SortIcon
+                          column="ersHarv"
+                          sortKey={sortKey}
+                          sortDir={sortDir}
+                          side="left"
+                        />
+                        ERS Harv
+                      </span>
                     </Tooltip>
                   </th>
                 )}
-                <th className="text-right py-1.5 px-2">Strategy</th>
+                <th className={tableHeadCellClass({ align: "right" })}>
+                  Strategy
+                </th>
               </tr>
             </thead>
             <tbody>
               {sortedStintHistory.map((entry) => {
                 const isFocused = entry.name === focusedName;
-                const gap = entry["delta-to-leader"];
                 const status = entry["result-status"];
-                const gapStr = status && status !== "FINISHED"
-                  ? status
-                  : gap == null || gap === 0 || gap === ""
-                    ? "Leader"
-                    : typeof gap === "number"
-                      ? `+${(gap / 1000).toFixed(3)}s`
-                      : String(gap);
-
-                const stints = getCompletedStints(entry["tyre-stint-history"] ?? []);
-                const stintStr = stints.length
-                  ? stints
-                      .map((s) => s["tyre-set-data"]["visual-tyre-compound"][0])
-                      .join("-")
-                  : "–";
+                const gapStr = formatRaceGap(entry);
+                const stintStr = formatRaceStrategy(
+                  entry["tyre-stint-history"] ?? [],
+                );
 
                 const stats = driverStats.get(entry.name);
                 const bestLap = stats?.bestLap ?? 0;
@@ -235,20 +249,31 @@ export function RaceResultsTable({
                 const topSpeed = stats?.topSpeed ?? 0;
                 const ers = stats?.ers ?? 0;
                 const ersHarv = stats?.ersHarv ?? 0;
-                const isBestLap = bestLap > 0 && Math.abs(bestLap - bestLapMs) < 1;
-                const isBestPace = racePace > 0 && Math.abs(racePace - bestPaceMs) < 1;
-                const isBestSpeed = topSpeed > 0 && Math.abs(topSpeed - bestSpeedKmh) < 1;
-                const isBestErs = ers > 0 && Math.abs(ers - bestErs) < 0.1;
-                const isBestErsHarv = ersHarv > 0 && Math.abs(ersHarv - bestErsHarv) < 0.1;
+                const isBestLap =
+                  bestLap > 0 && Math.abs(bestLap - highlights.bestLapMs) < 1;
+                const isBestPace =
+                  racePace > 0 &&
+                  Math.abs(racePace - highlights.bestPaceMs) < 1;
+                const isBestSpeed =
+                  topSpeed > 0 &&
+                  Math.abs(topSpeed - highlights.bestSpeedKmh) < 1;
+                const isBestErs =
+                  ers > 0 && Math.abs(ers - highlights.bestErs) < 0.1;
+                const isBestErsHarv =
+                  ersHarv > 0 &&
+                  Math.abs(ersHarv - highlights.bestErsHarv) < 0.1;
                 const penalties = penaltiesByDriver.get(entry.name) ?? [];
 
                 return (
                   <tr
                     key={`${entry.name}-${entry.team}`}
-                    className={cn(tableRowClass, isFocused && "bg-zinc-800/40 text-white font-medium")}
+                    className={cn(
+                      tableRowClass,
+                      isFocused && "bg-zinc-800/40 text-white font-medium",
+                    )}
                   >
-                    <td className="py-1.5 px-2">{entry.position}</td>
-                    <td className="py-1.5 px-2">
+                    <td className={tableCellClass()}>{entry.position}</td>
+                    <td className={tableCellClass()}>
                       <span
                         className="inline-block w-1 h-3 rounded-sm mr-1.5 align-middle"
                         style={{ backgroundColor: getTeamColor(entry.team) }}
@@ -258,28 +283,67 @@ export function RaceResultsTable({
                         <PenaltyBadge penalties={penalties} />
                       </span>
                     </td>
-                    <td className="py-1.5 px-2 text-zinc-400">{getTeamName(entry.team)}</td>
-                    <td className={cn("py-1.5 px-2 text-right font-mono", (status === "DNF" || status === "DSQ") && "text-behind")}>
+                    <td
+                      className={tableCellClass({ className: "text-zinc-400" })}
+                    >
+                      {getTeamName(entry.team)}
+                    </td>
+                    <td
+                      className={cn(
+                        tableCellClass({ align: "right", mono: true }),
+                        (status === "DNF" || status === "DSQ") && "text-behind",
+                      )}
+                    >
                       {gapStr}
                     </td>
-                    <td className={cn("py-1.5 px-2 text-right font-mono", isBestLap && "text-best")}>
+                    <td
+                      className={cn(
+                        tableCellClass({ align: "right", mono: true }),
+                        isBestLap && "text-best",
+                      )}
+                    >
                       {bestLap > 0 ? msToLapTime(bestLap) : "–"}
                     </td>
-                    <td className={cn("py-1.5 px-2 text-right font-mono", isBestPace && "text-best")}>
+                    <td
+                      className={cn(
+                        tableCellClass({ align: "right", mono: true }),
+                        isBestPace && "text-best",
+                      )}
+                    >
                       {racePace > 0 ? msToLapTime(racePace) : "–"}
                     </td>
-                    <td className={cn("py-1.5 px-2 text-right font-mono", isBestSpeed && "text-best")}>
+                    <td
+                      className={cn(
+                        tableCellClass({ align: "right", mono: true }),
+                        isBestSpeed && "text-best",
+                      )}
+                    >
                       {topSpeed > 0 ? `${Math.round(topSpeed)}` : "–"}
                     </td>
-                    <td className={cn("py-1.5 px-2 text-right font-mono", isBestErs && "text-best")}>
+                    <td
+                      className={cn(
+                        tableCellClass({ align: "right", mono: true }),
+                        isBestErs && "text-best",
+                      )}
+                    >
                       {ers > 0 ? ers.toFixed(1) : "–"}
                     </td>
-                    {hasErsHarv && (
-                      <td className={cn("py-1.5 px-2 text-right font-mono", isBestErsHarv && "text-best")}>
+                    {highlights.hasErsHarv && (
+                      <td
+                        className={cn(
+                          tableCellClass({ align: "right", mono: true }),
+                          isBestErsHarv && "text-best",
+                        )}
+                      >
                         {ersHarv > 0 ? ersHarv.toFixed(1) : "–"}
                       </td>
                     )}
-                    <td className="py-1.5 px-2 text-right text-zinc-400">
+                    <td
+                      className={tableCellClass({
+                        align: "right",
+                        className: "text-zinc-400",
+                      })}
+                    >
                       {stintStr}
                     </td>
                   </tr>
@@ -293,30 +357,34 @@ export function RaceResultsTable({
   }
 
   // Fallback: use classification-data with final-classification
-  const fallbackSorted = [...drivers]
-    .filter((d) => d["final-classification"])
-    .filter((d) => !focusedOnly || d.index === focusedDriverIndex)
-    .sort(
-      (a, b) =>
-        (a["final-classification"]?.position ?? 99) -
-        (b["final-classification"]?.position ?? 99),
-    );
+  const fallbackSorted = buildFallbackRaceRows({
+    drivers,
+    focusedOnly,
+    focusedDriverIndex,
+  });
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold text-zinc-300">Classification</h3>
-        <FocusToggle value={focusedOnly} onChange={toggleFocusedOnly} />
-      </div>
+      <SectionHeader
+        size="sm"
+        title="Classification"
+        action={
+          <FocusToggle value={focusedOnly} onChange={toggleFocusedOnly} />
+        }
+      />
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className={tableClass}>
           <thead className={tableHeadClass}>
             <tr>
-              <th className="text-left py-1.5 px-2">Pos</th>
-              <th className="text-left py-1.5 px-2">Driver</th>
-              <th className="text-left py-1.5 px-2">Team</th>
-              <th className="text-right py-1.5 px-2">Best Lap</th>
-              <th className="text-right py-1.5 px-2">Top Speed</th>
+              <th className={tableHeadCellClass()}>Pos</th>
+              <th className={tableHeadCellClass()}>Driver</th>
+              <th className={tableHeadCellClass()}>Team</th>
+              <th className={tableHeadCellClass({ align: "right" })}>
+                Best Lap
+              </th>
+              <th className={tableHeadCellClass({ align: "right" })}>
+                Top Speed
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -326,10 +394,14 @@ export function RaceResultsTable({
               return (
                 <tr
                   key={d.index}
-                  className={cn(tableRowClass, d.index === focusedDriverIndex && "bg-zinc-800/40 text-white font-medium")}
+                  className={cn(
+                    tableRowClass,
+                    d.index === focusedDriverIndex &&
+                      "bg-zinc-800/40 text-white font-medium",
+                  )}
                 >
-                  <td className="py-1.5 px-2">{fc.position}</td>
-                  <td className="py-1.5 px-2">
+                  <td className={tableCellClass()}>{fc.position}</td>
+                  <td className={tableCellClass()}>
                     <span
                       className="inline-block w-1 h-3 rounded-sm mr-1.5 align-middle"
                       style={{ backgroundColor: getTeamColor(d.team) }}
@@ -339,12 +411,22 @@ export function RaceResultsTable({
                       <PenaltyBadge penalties={penalties} />
                     </span>
                   </td>
-                  <td className="py-1.5 px-2 text-zinc-400">{getTeamName(d.team)}</td>
-                  <td className="py-1.5 px-2 text-right font-mono">
+                  <td
+                    className={tableCellClass({ className: "text-zinc-400" })}
+                  >
+                    {getTeamName(d.team)}
+                  </td>
+                  <td
+                    className={tableCellClass({ align: "right", mono: true })}
+                  >
                     {fc["best-lap-time-str"] || "–"}
                   </td>
-                  <td className="py-1.5 px-2 text-right font-mono">
-                    {driverTopSpeed(d) > 0 ? `${Math.round(driverTopSpeed(d))}` : "–"}
+                  <td
+                    className={tableCellClass({ align: "right", mono: true })}
+                  >
+                    {driverTopSpeed(d) > 0
+                      ? `${Math.round(driverTopSpeed(d))}`
+                      : "–"}
                   </td>
                 </tr>
               );

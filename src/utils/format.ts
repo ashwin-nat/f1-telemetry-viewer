@@ -34,7 +34,10 @@ const SECTOR_TIME_FIELDS = {
 } as const;
 
 /** PnG stores sector minutes separately from the millisecond remainder. */
-export function sectorTimeMs(lap: LapHistoryEntry, sector: SectorNumber): number {
+export function sectorTimeMs(
+  lap: LapHistoryEntry,
+  sector: SectorNumber,
+): number {
   const fields = SECTOR_TIME_FIELDS[sector];
   const ms = lap[fields.ms];
   const minutes = lap[fields.minutes] ?? 0;
@@ -74,9 +77,13 @@ export function formatDate(dateStr: string): string {
  * otherwise weekday + day + month, and the year only when it differs from now.
  * Compared against `now` (defaults to current time) so the result is stable per render.
  */
-export function formatRelativeDate(dateStr: string, now: Date = new Date()): string {
+export function formatRelativeDate(
+  dateStr: string,
+  now: Date = new Date(),
+): string {
   const d = new Date(dateStr);
-  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const startOf = (x: Date) =>
+    new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const dayMs = 24 * 60 * 60 * 1000;
   const diffDays = Math.round((startOf(now) - startOf(d)) / dayMs);
   if (diffDays === 0) return "Today";
@@ -113,6 +120,41 @@ export function formatGap(ms: number): string {
   return `${sign}${(Math.abs(ms) / 1000).toFixed(3)}s`;
 }
 
+export function pluralize(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+export function joinMetaParts(
+  parts: readonly (string | null | undefined | false)[],
+): string {
+  return parts.filter(Boolean).join(" · ");
+}
+
+export function formatSignedSeconds(valueMs: number, decimals = 3): string {
+  const sign = valueMs >= 0 ? "+" : "−";
+  return `${sign}${(Math.abs(valueMs) / 1000).toFixed(decimals)}s`;
+}
+
+export function formatEnergyMj(value: number, decimals = 1): string {
+  return `${value.toFixed(decimals)} MJ`;
+}
+
+export function formatEnergyMjPerLap(value: number, decimals = 1): string {
+  return `${formatEnergyMj(value, decimals)}/lap`;
+}
+
+export function formatFuelKg(value: number, decimals = 1): string {
+  return `${value.toFixed(decimals)} kg`;
+}
+
+export function formatKgPerLap(value: number, decimals = 2): string {
+  return `${value.toFixed(decimals)} kg/lap`;
+}
+
 /**
  * Format session type for display (shorter labels).
  *
@@ -137,217 +179,6 @@ export function formatSessionType(type: string, formula?: string): string {
     default:
       return type;
   }
-}
-
-/** Convert track names like "Abu Dhabi" to stable path slugs like "abu-dhabi". */
-export function toTrackSlug(track: string): string {
-  return track
-    .trim()
-    .toLowerCase()
-    .replace(/[_\s]+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-export function isTrackSlugMatch(track: string, slug: string | undefined): boolean {
-  return toTrackSlug(track) === (slug ?? "").toLowerCase();
-}
-
-/** Map F1 track names (from telemetry filenames) to ISO 3166-1 alpha-2 country codes */
-const TRACK_COUNTRY_CODES: Record<string, string> = {
-  // Current F1 calendar
-  Bahrain: "bh",
-  Sakhir: "bh",
-  Jeddah: "sa",
-  SaudiArabia: "sa",
-  Australia: "au",
-  Melbourne: "au",
-  Japan: "jp",
-  Suzuka: "jp",
-  China: "cn",
-  Shanghai: "cn",
-  Miami: "us",
-  Imola: "it",
-  Monaco: "mc",
-  Spain: "es",
-  Barcelona: "es",
-  Catalunya: "es",
-  Madrid: "es",
-  Madring: "es",
-  Canada: "ca",
-  Montreal: "ca",
-  Austria: "at",
-  Spielberg: "at",
-  Silverstone: "gb",
-  Hungary: "hu",
-  Budapest: "hu",
-  Hungaroring: "hu",
-  Spa: "be",
-  Belgium: "be",
-  Zandvoort: "nl",
-  Netherlands: "nl",
-  Monza: "it",
-  Italy: "it",
-  Baku: "az",
-  Azerbaijan: "az",
-  Singapore: "sg",
-  Marina: "sg",
-  Austin: "us",
-  COTA: "us",
-  Texas: "us",
-  Mexico: "mx",
-  Brazil: "br",
-  Interlagos: "br",
-  SaoPaulo: "br",
-  "Las Vegas": "us",
-  LasVegas: "us",
-  Vegas: "us",
-  Qatar: "qa",
-  Lusail: "qa",
-  Losail: "qa",
-  "Abu Dhabi": "ae",
-  AbuDhabi: "ae",
-  YasMarina: "ae",
-  // Classic / additional circuits
-  Portugal: "pt",
-  Portimao: "pt",
-  France: "fr",
-  "Paul Ricard": "fr",
-  PaulRicard: "fr",
-  Russia: "ru",
-  Sochi: "ru",
-  Turkey: "tr",
-  Istanbul: "tr",
-  Vietnam: "vn",
-  Hanoi: "vn",
-  Hockenheim: "de",
-  // Reverse / short layouts
-  "Austria Reverse": "at",
-  "Silverstone Reverse": "gb",
-  "Zandvoort Reverse": "nl",
-  "Sakhir Short": "bh",
-  "Silverstone Short": "gb",
-  "Texas Short": "us",
-  "Suzuka Short": "jp",
-};
-
-/**
- * Calendar orders use track names as they appear in telemetry files
- * (from pits-n-giggles TrackID display names).
- */
-const F1_25_TRACK_CALENDAR_ORDER: string[] = [
-  "Melbourne",
-  "Shanghai",
-  "Suzuka",
-  "Sakhir",
-  "Jeddah",
-  "Miami",
-  "Imola",
-  "Monaco",
-  "Catalunya",
-  "Montreal",
-  "Austria",
-  "Silverstone",
-  "Spa",
-  "Hungaroring",
-  "Zandvoort",
-  "Monza",
-  "Baku",
-  "Singapore",
-  "Texas",
-  "Mexico",
-  "Brazil",
-  "Las Vegas",
-  "Losail",
-  "Lusail",
-  "Abu Dhabi",
-];
-
-const F1_26_TRACK_CALENDAR_ORDER: string[] = [
-  "Melbourne",
-  "Shanghai",
-  "Suzuka",
-  "Sakhir",
-  "Jeddah",
-  "Miami",
-  "Montreal",
-  "Monaco",
-  "Catalunya",
-  "Austria",
-  "Silverstone",
-  "Spa",
-  "Hungaroring",
-  "Zandvoort",
-  "Monza",
-  "Madrid",
-  "Madring",
-  "Baku",
-  "Singapore",
-  "Texas",
-  "Mexico",
-  "Brazil",
-  "Las Vegas",
-  "Losail",
-  "Lusail",
-  "Abu Dhabi",
-];
-
-const ADDITIONAL_TRACK_ORDER: string[] = [
-  // Game/DLC/non-calendar circuits
-  "Madrid",
-  "Madring",
-  "Imola",
-  "Paul Ricard",
-  "Hockenheim",
-  "Sochi",
-  "Portimao",
-  "Hanoi",
-  // Short / reverse layouts
-  "Sakhir Short",
-  "Silverstone Short",
-  "Texas Short",
-  "Suzuka Short",
-  "Silverstone Reverse",
-  "Austria Reverse",
-  "Zandvoort Reverse",
-];
-
-function getTrackCalendarOrder(formulaScopeKey?: string | null): string[] {
-  // F1 26 has a different real-world calendar than F1 25: Imola drops out
-  // and Madrid/Madring sits between Monza and Baku. Keep the older order as
-  // the fallback so legacy F1/F2 exports remain stable.
-  const officialOrder =
-    formulaScopeKey === "f1-26"
-      ? F1_26_TRACK_CALENDAR_ORDER
-      : F1_25_TRACK_CALENDAR_ORDER;
-
-  const officialTracks = new Set(officialOrder);
-  return [
-    ...officialOrder,
-    ...ADDITIONAL_TRACK_ORDER.filter((track) => !officialTracks.has(track)),
-  ];
-}
-
-/** Sort track names by calendar order (unknown tracks sort to the end alphabetically). */
-export function sortTracksByCalendar(
-  tracks: string[],
-  formulaScopeKey?: string | null,
-): string[] {
-  const trackCalendarOrder = getTrackCalendarOrder(formulaScopeKey);
-  return [...tracks].sort((a, b) => {
-    const idxA = trackCalendarOrder.indexOf(a);
-    const idxB = trackCalendarOrder.indexOf(b);
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    if (idxA !== -1) return -1;
-    if (idxB !== -1) return 1;
-    return a.localeCompare(b);
-  });
-}
-
-/** Get ISO country code for a track name, or null for unknown tracks */
-export function getTrackCountryCode(track: string): string | null {
-  return TRACK_COUNTRY_CODES[track] ?? null;
 }
 
 /** Get emoji icon for a session type */

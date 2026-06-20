@@ -70,11 +70,11 @@ export function RaceResultsProgression({
           <div className="text-xs font-mono font-semibold uppercase tracking-wider text-zinc-500">
             Race-by-race
           </div>
-          <div className="mt-0.5 text-xs text-zinc-500">
+          <div className="mt-0.5 font-mono text-xs tabular-nums text-zinc-500">
             Grid (left) vs finish (right). Taller = higher up the order.
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-zinc-500">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-2xs tabular-nums text-zinc-500">
           <ProgressionLegendSwatch className="bg-purple-500/80" label="Pole" />
           <ProgressionLegendSwatch
             className={RACE_TIER_CLASS.p1.race}
@@ -108,7 +108,7 @@ export function RaceResultsProgression({
         ))}
       </div>
 
-      <div className="mt-2 flex items-center justify-between text-2xs uppercase tracking-wider text-zinc-600">
+      <div className="mt-2 flex items-center justify-between font-mono text-2xs uppercase tracking-wider tabular-nums text-zinc-600">
         <span>{firstDate}</span>
         <span className="text-zinc-700">first → latest</span>
         <span>{lastDate}</span>
@@ -137,12 +137,18 @@ function ProgressionBar({
   return (
     <div className="flex h-full flex-col items-center justify-end gap-0.5">
       <span
-        className={cn("font-mono text-[9px] leading-none tabular-nums", labelClass)}
+        className={cn(
+          "font-mono text-3xs leading-none tabular-nums",
+          labelClass,
+        )}
       >
         {label}
       </span>
       <div
-        className={cn("w-2 rounded-t-sm transition-all group-hover:brightness-125", colorClass)}
+        className={cn(
+          "w-2 rounded-t-sm transition-all group-hover:brightness-125",
+          colorClass,
+        )}
         style={{ height: `${heightPx}px` }}
       />
     </div>

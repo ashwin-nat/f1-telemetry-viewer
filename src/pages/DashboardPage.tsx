@@ -6,31 +6,32 @@ import { InsightCard } from "../components/dashboard/InsightCard";
 import { QualifyingPaceCard } from "../components/dashboard/QualifyingPaceCard";
 import { RaceResultsHero } from "../components/dashboard/RaceResultsHero";
 import { RivalCard } from "../components/dashboard/RivalCard";
-import { SectionHeader } from "../components/ui/SectionHeader";
 import { TrackOverviewCard } from "../components/dashboard/TrackOverviewCard";
+import { Button } from "../components/ui/Button";
+import { Eyebrow } from "../components/ui/Eyebrow";
 import {
   type SessionStats,
   buildQualifyingPaceData,
-  buildTrackRecords,
   buildTrackGroups,
+  buildTrackRecords,
 } from "../components/dashboard/helpers";
+import { SectionHeader } from "../components/ui/SectionHeader";
 import { useTelemetry } from "../context/TelemetryContext";
-import { useSessionList } from "../hooks/useSessionList";
+import { buildDashboardActivity } from "../analysis/dashboardActivity";
+import { buildTrackInsights } from "../analysis/dashboardInsights";
+import { getDashboardResultStats } from "../analysis/dashboardResultStats";
+import { buildRivalStats } from "../analysis/rivalStats";
 import {
   areSessionFiltersDefault,
   DEFAULT_FILTERS,
   matchesSessionFilters,
   useSessionFilters,
 } from "../hooks/useSessionFilters";
+import { useSessionList } from "../hooks/useSessionList";
 import { cn } from "../utils/cn";
-import { buildDashboardActivity } from "../utils/dashboardActivity";
-import {
-  buildTrackInsights,
-  getDashboardResultStats,
-  getSessionFormulaScopeKey,
-} from "../utils/dashboardStats";
-import { formatRelativeDate, sortTracksByCalendar } from "../utils/format";
-import { buildRivalStats } from "../utils/rivalStats";
+import { getSessionFormulaScopeKey } from "../utils/formulaScope";
+import { formatRelativeDate } from "../utils/format";
+import { sortTracksByCalendar } from "../utils/tracks";
 import { isRaceSessionType } from "../utils/sessionTypes";
 
 const RECENT_ACTIVITY_COLLAPSED = 3;
@@ -148,21 +149,23 @@ export function DashboardPage() {
       </div>
 
       {!hasScopedData ? (
-        <section className={cn("rounded-2xl bg-zinc-900/40 px-5 py-8 text-center", cardHighlight)}>
-          <h3 className="text-sm font-semibold text-zinc-300">
-            {emptyTitle}
-          </h3>
-          <p className="mt-1 text-sm text-zinc-500">
-            {emptyHint}
-          </p>
+        <section
+          className={cn(
+            "rounded-2xl bg-zinc-900/40 px-5 py-8 text-center",
+            cardHighlight,
+          )}
+        >
+          <h3 className="text-sm font-semibold text-zinc-300">{emptyTitle}</h3>
+          <p className="mt-1 text-sm text-zinc-500">{emptyHint}</p>
           {isFiltered && (
-            <button
-              type="button"
+            <Button
+              size="sm"
+              variant="secondary"
               onClick={() => setFilters(DEFAULT_FILTERS)}
-              className="mt-4 rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-600"
+              className="mt-4"
             >
               Reset filters
-            </button>
+            </Button>
           )}
         </section>
       ) : (
@@ -177,23 +180,25 @@ export function DashboardPage() {
 
           {hasRecentActivity && (
             <section>
-              <SectionHeader
-                title="Recent Activity"
-                hint="Best representative sessions from recent driving"
-              />
+              <SectionHeader title="Recent Activity" />
               <div className="space-y-4">
                 {Object.entries(
                   (showAllActivity
                     ? recentActivity
                     : recentActivity.slice(0, RECENT_ACTIVITY_COLLAPSED)
-                  ).reduce<Record<string, typeof recentActivity>>((acc, activity) => {
-                    (acc[activity.dayKey] ??= []).push(activity);
-                    return acc;
-                  }, {}),
+                  ).reduce<Record<string, typeof recentActivity>>(
+                    (acc, activity) => {
+                      (acc[activity.dayKey] ??= []).push(activity);
+                      return acc;
+                    },
+                    {},
+                  ),
                 ).map(([dayKey, activities]) => (
                   <div key={dayKey}>
-                    <h3 className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                      {formatRelativeDate(dayKey + "T00:00:00")}
+                    <h3 className="mb-1.5 px-1">
+                      <Eyebrow>
+                        {formatRelativeDate(dayKey + "T00:00:00")}
+                      </Eyebrow>
                     </h3>
                     <div className="space-y-1.5">
                       {activities.map((activity) => (
@@ -203,12 +208,12 @@ export function DashboardPage() {
                   </div>
                 ))}
               </div>
-              {recentActivity.length >
-                RECENT_ACTIVITY_COLLAPSED && (
-                <button
-                  type="button"
+              {recentActivity.length > RECENT_ACTIVITY_COLLAPSED && (
+                <Button
+                  size="xs"
+                  variant="ghost"
                   onClick={() => setShowAllActivity((value) => !value)}
-                  className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-600"
+                  className="mt-2"
                 >
                   {showAllActivity ? (
                     <>
@@ -216,23 +221,18 @@ export function DashboardPage() {
                     </>
                   ) : (
                     <>
-                      Show{" "}
-                      {recentActivity.length -
-                        RECENT_ACTIVITY_COLLAPSED}{" "}
+                      Show {recentActivity.length - RECENT_ACTIVITY_COLLAPSED}{" "}
                       more <ChevronDown className="size-3" />
                     </>
                   )}
-                </button>
+                </Button>
               )}
             </section>
           )}
 
           {insights.length > 0 && (
             <section>
-              <SectionHeader
-                title="Insights"
-                hint="Patterns across your sessions — race insights use online results when available"
-              />
+              <SectionHeader title="Insights" />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {insights.map((insight) => (
                   <InsightCard
@@ -246,13 +246,13 @@ export function DashboardPage() {
 
           {rivalStats.cards.length > 0 && (
             <section>
-              <SectionHeader
-                title="Rivals & Teammates"
-                hint={`The drivers you race online — across ${rivalStats.raceCount} ${rivalStats.raceCount === 1 ? "race" : "races"}`}
-              />
+              <SectionHeader title="Rivals & Teammates" />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {rivalStats.cards.map((card) => (
-                  <RivalCard key={`${card.kind}-${card.driverName}`} card={card} />
+                  <RivalCard
+                    key={`${card.kind}-${card.driverName}`}
+                    card={card}
+                  />
                 ))}
               </div>
             </section>
@@ -262,7 +262,6 @@ export function DashboardPage() {
             <section>
               <SectionHeader
                 title="Qualifying Pace"
-                hint="Best lap per day"
                 action={<Timer className="size-4 text-zinc-600" />}
               />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

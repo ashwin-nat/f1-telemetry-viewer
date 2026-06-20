@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { useSessionList } from "./useSessionList";
 import { useTelemetry } from "../context/TelemetryContext";
+import { findPlayer, isRaceSession } from "../utils/stats/drivers";
 import {
-  findPlayer,
-  getValidLaps,
-  getCleanRaceLaps,
   getBestLapTime,
-  isRaceSession,
-} from "../utils/stats";
+  getCleanRaceLaps,
+  getValidLaps,
+} from "../utils/stats/laps";
 import { bestSectorTimeMs } from "../utils/format";
 import { getFormulaComparisonKey } from "../utils/sessionTypes";
 
@@ -45,7 +44,8 @@ export function useTrackHistory(
     (s) =>
       s.track === trackName &&
       s.slug !== currentSlug &&
-      getFormulaComparisonKey(s.formula, s.gameYear) === getFormulaComparisonKey(formula, gameYear),
+      getFormulaComparisonKey(s.formula, s.gameYear) ===
+        getFormulaComparisonKey(formula, gameYear),
   );
   const trackSessionKey = trackSessions.map((s) => s.slug).join("|");
 

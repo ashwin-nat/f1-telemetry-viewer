@@ -1,16 +1,23 @@
-import { useState, useMemo, useEffect } from "react";
-import type { TelemetrySession } from "../types/telemetry";
-import { findFocusedDriver, generateQualiInsights, generateQualiHistoryInsights } from "../utils/stats";
-import { useTrackHistory } from "../hooks/useTrackHistory";
-import { useSessionList } from "../hooks/useSessionList";
-import { SessionHeader } from "../components/SessionHeader";
-import { StrategyInsightsCard } from "../components/StrategyInsightsCard";
-import { QualifyingTable } from "../components/QualifyingTable";
-import { SectorComparison } from "../components/SectorComparison";
-import { SectorVsBest } from "../components/SectorVsBest";
+import { useEffect, useMemo, useState } from "react";
+import { curateSessionInsights } from "../analysis/sessionInsightCuration";
+import {
+  buildSessionInsightsHint,
+  buildSessionSummaryInsights,
+} from "../analysis/sessionInsightSummary";
 import { CarSetupCard } from "../components/CarSetupCard";
 import { Card } from "../components/Card";
 import { DuplicateNotice } from "../components/DuplicateNotice";
+import { QualifyingTable } from "../components/QualifyingTable";
+import { SectorComparison } from "../components/SectorComparison";
+import { SectorVsBest } from "../components/SectorVsBest";
+import { SessionHeader } from "../components/SessionHeader";
+import { SessionInsightsGrid } from "../components/SessionInsightsGrid";
+import { useSessionList } from "../hooks/useSessionList";
+import { useTrackHistory } from "../hooks/useTrackHistory";
+import type { TelemetrySession } from "../types/telemetry";
+import { findFocusedDriver } from "../utils/stats/drivers";
+import { generateQualiHistoryInsights } from "../utils/stats/historyInsights";
+import { generateQualiInsights } from "../utils/stats/qualifyingInsights";
 
 export function QualifyingSessionView({
   session,
@@ -37,7 +44,8 @@ export function QualifyingSessionView({
   );
 
   const laps = focusedDriver?.["session-history"]["lap-history-data"] ?? [];
-  const stints = focusedDriver?.["session-history"]["tyre-stints-history-data"] ?? [];
+  const stints =
+    focusedDriver?.["session-history"]["tyre-stints-history-data"] ?? [];
   const perLapInfo = focusedDriver?.["per-lap-info"] ?? [];
   // Find track name from session list to match history
   const { sessions: allSessions } = useSessionList();
@@ -46,7 +54,12 @@ export function QualifyingSessionView({
     [allSessions, slug],
   );
   const trackName = sessionMeta?.track ?? session["session-info"]["track-id"];
-  const { pbs } = useTrackHistory(trackName, slug, session["session-info"].formula, session["game-year"]);
+  const { pbs } = useTrackHistory(
+    trackName,
+    slug,
+    session["session-info"].formula,
+    session["game-year"],
+  );
 
   const insights = useMemo(() => {
     if (!focusedDriver) return [];
@@ -56,14 +69,25 @@ export function QualifyingSessionView({
     }
     return base;
   }, [session, focusedDriver, pbs]);
+  const summaryInsights = useMemo(
+    () => buildSessionSummaryInsights({ session, focusedDriver }),
+    [focusedDriver, session],
+  );
+  const sessionInsights = useMemo(
+    () => curateSessionInsights(session, [...summaryInsights, ...insights]),
+    [insights, session, summaryInsights],
+  );
+  const insightsHint = useMemo(
+    () => buildSessionInsightsHint(session),
+    [session],
+  );
 
   // Show car setup only for the actual player with valid setup data
   const showSetup =
-    focusedDriver?.["is-player"] &&
-    focusedDriver["car-setup"]?.["is-valid"];
+    focusedDriver?.["is-player"] && focusedDriver["car-setup"]?.["is-valid"];
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-8">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6 sm:space-y-8">
       <SessionHeader
         session={session}
         focusedDriverIndex={focusedDriverIndex}
@@ -71,23 +95,32 @@ export function QualifyingSessionView({
         slug={slug}
       />
 
-      {/* Qualifying insights */}
-      <StrategyInsightsCard insights={insights} />
+      <SessionInsightsGrid insights={sessionInsights} hint={insightsHint} />
 
       {/* Results table */}
       <Card as="section">
-        <QualifyingTable session={session} focusedDriverIndex={focusedDriverIndex} />
+        <QualifyingTable
+          session={session}
+          focusedDriverIndex={focusedDriverIndex}
+        />
       </Card>
 
       {/* Sector comparison vs session best */}
       <Card as="section">
-        <SectorVsBest session={session} focusedDriverIndex={focusedDriverIndex} />
+        <SectorVsBest
+          session={session}
+          focusedDriverIndex={focusedDriverIndex}
+        />
       </Card>
 
       {/* Player lap breakdown */}
       {laps.length > 0 && (
         <Card as="section">
-          <SectorComparison laps={laps} stints={stints} perLapInfo={perLapInfo} />
+          <SectorComparison
+            laps={laps}
+            stints={stints}
+            perLapInfo={perLapInfo}
+          />
         </Card>
       )}
 
@@ -98,7 +131,10 @@ export function QualifyingSessionView({
         </Card>
       )}
 
-      <DuplicateNotice count={sessionMeta?.duplicateCount ?? 0} />
+      <DuplicateNotice
+        count={sessionMeta?.duplicateCount ?? 0}
+        isAutoSave={sessionMeta?.isAutoSave}
+      />
     </div>
   );
 }

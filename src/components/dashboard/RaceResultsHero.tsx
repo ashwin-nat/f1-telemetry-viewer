@@ -8,8 +8,10 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../../utils/cn";
-import type { DashboardResultStats } from "../../utils/dashboardStats";
+import type { DashboardResultStats } from "../../analysis/dashboardResultStats";
 import { Card } from "../Card";
+import { Eyebrow } from "../ui/Eyebrow";
+import { InsightDetail, InsightValue } from "../ui/InsightText";
 import { HStack, VStack } from "../ui/Stack";
 import { GridGainGlyph } from "./GridGainGlyph";
 import { RaceResultsProgression } from "./RaceResultsProgression";
@@ -35,11 +37,14 @@ function PodiumChip({
   return (
     <HStack
       justify="center"
-      className={cn("flex-1 gap-3 rounded-xl px-4 py-3", positionBadgeClasses(position))}
+      className={cn(
+        "flex-1 gap-3 rounded-xl px-4 py-3",
+        positionBadgeClasses(position),
+      )}
     >
       <Icon className="size-5 shrink-0 opacity-80" />
       <VStack align="start" className="gap-0.5">
-        <span className="text-2xs font-bold uppercase tracking-wider opacity-80">
+        <span className="font-mono text-2xs font-bold uppercase tracking-wider opacity-80">
           P{position}
         </span>
         <span className="text-2xl font-semibold leading-none tabular-nums">
@@ -65,14 +70,18 @@ function MicroStat({
 }) {
   return (
     <div className="min-w-0">
-      <HStack className="gap-1.5 text-xs font-mono font-semibold uppercase tracking-wider text-zinc-500">
+      <HStack className="gap-1.5">
         {Icon && <Icon className="size-3" />}
-        {label}
+        <Eyebrow>{label}</Eyebrow>
       </HStack>
-      <div className={cn("mt-1 text-xl font-semibold tabular-nums", tone)}>
+      <InsightValue size="lg" tone={tone} className="mt-1">
         {value}
-      </div>
-      {detail && <div className="mt-0.5 text-xs text-zinc-500">{detail}</div>}
+      </InsightValue>
+      {detail && (
+        <InsightDetail size="sm" tone="text-zinc-500" className="mt-0.5">
+          {detail}
+        </InsightDetail>
+      )}
     </div>
   );
 }
@@ -114,7 +123,7 @@ export function RaceResultsHero({
         justify="between"
         className="-mx-5 -mt-5 mb-6 border-b border-white/[0.05] px-5 py-3 text-xs"
       >
-        <span className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-wider text-zinc-400">
+        <span className="inline-flex items-center gap-1.5 font-mono font-semibold uppercase tracking-wider text-zinc-400">
           {(stats.mode === "representative-online" ||
             stats.mode === "online") && (
             <Globe className="size-3 text-zinc-500" />
@@ -133,10 +142,15 @@ export function RaceResultsHero({
           <div className="text-6xl font-semibold leading-[0.8] tracking-tight tabular-nums text-zinc-100 mb-3.5">
             {headlineValue}
           </div>
-          <div className="mt-2 text-sm text-zinc-400">{headlineCaption}</div>
+          <div className="mt-2 font-mono text-sm tabular-nums text-zinc-400">
+            {headlineCaption}
+          </div>
           {gridGain != null && (
             <div
-              className={cn("mt-3 inline-flex items-center gap-1.5 text-xs font-mono", gridGainTone(gridGain))}
+              className={cn(
+                "mt-3 inline-flex items-center gap-1.5 text-xs font-mono",
+                gridGainTone(gridGain),
+              )}
             >
               <GridGainGlyph value={gridGain} />
               <span>{signedNumber(gridGain)} avg grid Δ</span>
@@ -202,7 +216,9 @@ export function RaceResultsHero({
       )}
 
       {stats.modeDetail && (
-        <p className="mt-5 text-xs text-zinc-500">{stats.modeDetail}</p>
+        <p className="mt-5 font-mono text-xs tabular-nums text-zinc-500">
+          {stats.modeDetail}
+        </p>
       )}
     </Card>
   );

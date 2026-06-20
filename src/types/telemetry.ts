@@ -41,7 +41,11 @@ export interface SessionSummary {
   /** Player's team identifier for this session (raw value from JSON — Ferrari, "211", etc.). */
   playerTeam?: string;
   /** Per-driver lap stats for the player (mean + stddev of valid laps) — race sessions only. */
-  playerLapStats?: { meanLapMs: number; stddevLapMs: number; validLapCount: number };
+  playerLapStats?: {
+    meanLapMs: number;
+    stddevLapMs: number;
+    validLapCount: number;
+  };
   /**
    * Slim roster of non-player drivers from this race, used by the Rivals & Teammates
    * section. Only emitted for online race sessions. See {@link RivalEntry}.
@@ -60,8 +64,8 @@ export interface SessionSummary {
   /**
    * True when the save was produced by Pits n' Giggles' periodic
    * "just-in-case" auto-save (detected from the filename). Used for the
-   * dominance-based dedup rule and to render an "Auto-save" badge in the
-   * session list. See `src/utils/deduplicateSessions.ts`.
+   * dominance-based dedup rule and detail-page save provenance. See
+   * `src/utils/deduplicateSessions.ts`.
    */
   isAutoSave?: boolean;
   /**
@@ -240,7 +244,7 @@ export interface CarSetup {
   "rear-right-tyre-pressure": number;
   "front-left-tyre-pressure": number;
   "front-right-tyre-pressure": number;
-  "ballast": number;
+  ballast: number;
   "fuel-load": number;
   "is-valid": boolean;
 }

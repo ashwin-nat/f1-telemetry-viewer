@@ -1,9 +1,18 @@
 import type { SessionSummary } from "../types/telemetry";
-import { getSessionFormulaScopeKey } from "./dashboardStats";
-import { toTrackSlug } from "./format";
-
-export const TRACKS_ROUTE_SEGMENT = "tracks";
-export const SESSIONS_ROUTE_SEGMENT = "sessions";
+import {
+  SESSIONS_ROUTE_SEGMENT,
+  TRACK_SESSION_TABS,
+  TRACK_TAB_QUERY_PARAM,
+  TRACKS_ROUTE_SEGMENT,
+  type TrackSessionTab,
+} from "../constants/routes";
+import { getSessionFormulaScopeKey } from "./formulaScope";
+import { toTrackSlug } from "./tracks";
+import {
+  isQualifyingSessionType,
+  isRaceSessionType,
+  isTimeTrialSessionType,
+} from "./sessionTypes";
 
 /**
  * Canonical app routes are scoped by game/formula as the first path segment:
@@ -18,8 +27,30 @@ export function dashboardPath(formulaKey?: string | null): string {
   return formulaKey ? `/${encodeURIComponent(formulaKey)}` : "/";
 }
 
-export function trackPath(formulaKey: string, track: string): string {
-  return `/${encodeURIComponent(formulaKey)}/${TRACKS_ROUTE_SEGMENT}/${toTrackSlug(track)}`;
+export function isTrackSessionTab(
+  value: string | null | undefined,
+): value is TrackSessionTab {
+  return TRACK_SESSION_TABS.includes(value as TrackSessionTab);
+}
+
+export function trackTabForSessionType(
+  sessionType: string | undefined,
+): TrackSessionTab {
+  if (isRaceSessionType(sessionType)) return "race";
+  if (isTimeTrialSessionType(sessionType)) return "time-trial";
+  if (isQualifyingSessionType(sessionType)) return "qualifying";
+  return "qualifying";
+}
+
+export function trackPath(
+  formulaKey: string,
+  track: string,
+  tab?: TrackSessionTab,
+): string {
+  const path = `/${encodeURIComponent(formulaKey)}/${TRACKS_ROUTE_SEGMENT}/${toTrackSlug(track)}`;
+  return tab
+    ? `${path}?${TRACK_TAB_QUERY_PARAM}=${encodeURIComponent(tab)}`
+    : path;
 }
 
 export function sessionPath(formulaKey: string, slug: string): string {
@@ -41,12 +72,17 @@ export function isRootPath(pathname: string): boolean {
  * deliberate split keeps routing flexible: future route models can change
  * validation rules in one place without every component learning URL grammar.
  */
-export function getFormulaScopeCandidateFromPath(pathname: string): string | null {
+export function getFormulaScopeCandidateFromPath(
+  pathname: string,
+): string | null {
   const [formulaKey] = pathname.split("/").filter(Boolean);
   return formulaKey ?? null;
 }
 
-export function replaceFormulaScopeInPath(pathname: string, nextFormulaKey: string): string {
+export function replaceFormulaScopeInPath(
+  pathname: string,
+  nextFormulaKey: string,
+): string {
   const parts = pathname.split("/").filter(Boolean);
   if (parts.length === 0) return dashboardPath(nextFormulaKey);
   parts[0] = encodeURIComponent(nextFormulaKey);

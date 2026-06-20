@@ -38,12 +38,14 @@ function MetricShell({
 }) {
   return (
     <div className="min-w-0">
-      <div className="text-2xs font-medium uppercase tracking-wider text-zinc-500">
+      <div className="font-mono text-2xs font-medium uppercase tracking-wider text-zinc-500">
         {label}
       </div>
       <div className="mt-1 min-w-0">{children}</div>
       {detail && (
-        <div className="mt-0.5 truncate text-2xs text-zinc-500">{detail}</div>
+        <div className="mt-0.5 truncate font-mono text-2xs tabular-nums text-zinc-500">
+          {detail}
+        </div>
       )}
     </div>
   );
@@ -65,7 +67,7 @@ function LapMetric({
     >
       <div
         className={cn(
-          "truncate font-mono text-[15px] font-semibold tabular-nums",
+          "truncate font-mono text-md font-semibold tabular-nums",
           record ? tone : "text-zinc-700",
         )}
       >
@@ -79,7 +81,7 @@ function RaceMetric({ record }: { record: TrackRaceRecord | undefined }) {
   if (!record) {
     return (
       <MetricShell label="Race">
-        <div className="truncate font-mono text-[15px] font-semibold tabular-nums text-zinc-700">
+        <div className="truncate font-mono text-md font-semibold tabular-nums text-zinc-700">
           —
         </div>
       </MetricShell>
@@ -101,7 +103,7 @@ function RaceMetric({ record }: { record: TrackRaceRecord | undefined }) {
     <MetricShell label="Race" detail={detail}>
       <div
         className={cn(
-          "inline-flex items-center gap-1.5 truncate font-mono text-[15px] font-semibold tabular-nums",
+          "inline-flex items-center gap-1.5 truncate font-mono text-md font-semibold tabular-nums",
           tone,
         )}
       >
@@ -142,7 +144,7 @@ export function TrackOverviewCard({
           <TrackFlag track={track} />
           <span className="truncate">{track}</span>
         </div>
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400">
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs tabular-nums text-zinc-400">
           <span>
             {sessions.length} {sessions.length === 1 ? "session" : "sessions"}
           </span>
@@ -159,17 +161,13 @@ export function TrackOverviewCard({
         <LapMetric
           label="Online Q"
           record={records.onlineQualifying}
-          tone="text-purple-300"
+          tone="text-best"
         />
-        <LapMetric
-          label="TT"
-          record={records.timeTrial}
-          tone="text-cyan-300"
-        />
+        <LapMetric label="TT" record={records.timeTrial} tone="text-cyan-300" />
         <LapMetric
           label="Offline Q"
           record={records.offlineQualifying}
-          tone="text-purple-300"
+          tone="text-best"
         />
       </div>
     </>
@@ -179,7 +177,10 @@ export function TrackOverviewCard({
     return (
       <div
         title="Demo data — upload your telemetry to explore this track"
-        className={cn(cardClass, "relative min-h-40 overflow-hidden opacity-70")}
+        className={cn(
+          cardClass,
+          "relative min-h-40 overflow-hidden opacity-70",
+        )}
       >
         {inner}
       </div>
@@ -188,7 +189,12 @@ export function TrackOverviewCard({
 
   if (!activeFormulaKey) {
     return (
-      <div className={cn(cardClass, "relative min-h-40 overflow-hidden opacity-70")}>
+      <div
+        className={cn(
+          cardClass,
+          "relative min-h-40 overflow-hidden opacity-70",
+        )}
+      >
         {inner}
       </div>
     );

@@ -1,8 +1,15 @@
 import type { LapHistoryEntry, TyreStint } from "../types/telemetry";
-import { filterOutlierLaps, getBestLapTime, medianLapTimeMs } from "../utils/stats";
+import { buildCompoundLapComparisonRows } from "../analysis/resultsAnalysis";
 import { msToLapTime } from "../utils/format";
-import { getCompoundColor } from "../utils/colors";
-import { tableHeadClass, tableRowClass } from "./ui/table";
+import { CompoundSwatchLabel } from "./ui/CompoundSwatchLabel";
+import { SectionHeader } from "./ui/SectionHeader";
+import {
+  tableCellClass,
+  tableClass,
+  tableHeadCellClass,
+  tableHeadClass,
+  tableRowClass,
+} from "./ui/table";
 import { cn } from "../utils/cn";
 
 interface CompoundLapComparisonProps {
@@ -13,23 +20,6 @@ interface CompoundLapComparisonProps {
   rivalName: string;
 }
 
-interface CompoundStats {
-  compound: string;
-  playerMedian: number;
-  rivalMedian: number;
-  playerBest: number;
-  rivalBest: number;
-  playerLapCount: number;
-  rivalLapCount: number;
-}
-
-function getLapsForStint(
-  allLaps: LapHistoryEntry[],
-  stint: TyreStint,
-): LapHistoryEntry[] {
-  return allLaps.slice(stint["start-lap"] - 1, stint["end-lap"]);
-}
-
 export function CompoundLapComparison({
   playerStints,
   playerLaps,
@@ -37,106 +27,110 @@ export function CompoundLapComparison({
   rivalLaps,
   rivalName,
 }: CompoundLapComparisonProps) {
-  // Group valid laps by compound for each driver
-  const playerByCompound = new Map<string, LapHistoryEntry[]>();
-  for (const stint of playerStints) {
-    const compound = stint["tyre-set-data"]["visual-tyre-compound"];
-    const laps = filterOutlierLaps(getLapsForStint(playerLaps, stint));
-    const existing = playerByCompound.get(compound) ?? [];
-    playerByCompound.set(compound, [...existing, ...laps]);
-  }
-
-  const rivalByCompound = new Map<string, LapHistoryEntry[]>();
-  for (const stint of rivalStints) {
-    const compound = stint["tyre-set-data"]["visual-tyre-compound"];
-    const laps = filterOutlierLaps(getLapsForStint(rivalLaps, stint));
-    const existing = rivalByCompound.get(compound) ?? [];
-    rivalByCompound.set(compound, [...existing, ...laps]);
-  }
-
-  // Build stats for compounds used by both drivers
-  const compounds = [...new Set([...playerByCompound.keys()])].filter((c) =>
-    rivalByCompound.has(c),
-  );
-
-  if (compounds.length === 0) return null;
-
-  const stats: CompoundStats[] = compounds.map((compound) => {
-    const pLaps = playerByCompound.get(compound)!;
-    const rLaps = rivalByCompound.get(compound)!;
-    return {
-      compound,
-      playerMedian: medianLapTimeMs(pLaps),
-      rivalMedian: medianLapTimeMs(rLaps),
-      playerBest: getBestLapTime(pLaps),
-      rivalBest: getBestLapTime(rLaps),
-      playerLapCount: pLaps.length,
-      rivalLapCount: rLaps.length,
-    };
+  const rows = buildCompoundLapComparisonRows({
+    playerStints,
+    playerLaps,
+    rivalStints,
+    rivalLaps,
   });
+  if (rows.length === 0) return null;
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-zinc-300 mb-2">
-        Compound Comparison{" "}
-        <span className="font-normal text-zinc-500">vs {rivalName}</span>
-      </h3>
+      <SectionHeader
+        size="sm"
+        title="Compound Comparison"
+        hint={`vs ${rivalName}`}
+      />
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className={tableClass}>
           <thead className={tableHeadClass}>
             <tr>
-              <th className="text-left py-1.5 px-2">Compound</th>
-              <th className="text-right py-1.5 px-2">Your Median</th>
-              <th className="text-right py-1.5 px-2">Rival Median</th>
-              <th className="text-right py-1.5 px-2">Delta</th>
-              <th className="text-right py-1.5 px-2">Your Best</th>
-              <th className="text-right py-1.5 px-2">Rival Best</th>
-              <th className="text-right py-1.5 px-2">Laps</th>
+              <th className={tableHeadCellClass()}>Compound</th>
+              <th className={tableHeadCellClass({ align: "right" })}>
+                Your Median
+              </th>
+              <th className={tableHeadCellClass({ align: "right" })}>
+                Rival Median
+              </th>
+              <th className={tableHeadCellClass({ align: "right" })}>Delta</th>
+              <th className={tableHeadCellClass({ align: "right" })}>
+                Your Best
+              </th>
+              <th className={tableHeadCellClass({ align: "right" })}>
+                Rival Best
+              </th>
+              <th className={tableHeadCellClass({ align: "right" })}>Laps</th>
             </tr>
           </thead>
           <tbody>
-            {stats.map((s) => {
-              const delta = (s.playerMedian - s.rivalMedian) / 1000;
-              const positive = delta > 0;
+            {rows.map((s) => {
+              const positive = s.deltaSeconds > 0;
               return (
                 <tr key={s.compound} className={tableRowClass}>
-                  <td className="py-1.5 px-2">
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className="w-2 h-2 rounded-sm inline-block"
-                        style={{
-                          backgroundColor: getCompoundColor(s.compound),
-                        }}
-                      />
-                      <span className="text-zinc-300">{s.compound}</span>
-                    </span>
+                  <td className={tableCellClass()}>
+                    <CompoundSwatchLabel compound={s.compound} />
                   </td>
-                  <td className="text-right py-1.5 px-2 font-mono text-zinc-300">
+                  <td
+                    className={tableCellClass({
+                      align: "right",
+                      mono: true,
+                      className: "text-zinc-300",
+                    })}
+                  >
                     {msToLapTime(s.playerMedian)}
                   </td>
-                  <td className="text-right py-1.5 px-2 font-mono text-zinc-300">
+                  <td
+                    className={tableCellClass({
+                      align: "right",
+                      mono: true,
+                      className: "text-zinc-300",
+                    })}
+                  >
                     {msToLapTime(s.rivalMedian)}
                   </td>
                   <td
                     className={cn(
-                      "text-right py-1.5 px-2 font-mono font-bold",
-                      Math.abs(delta) < 0.001
+                      tableCellClass({
+                        align: "right",
+                        mono: true,
+                        className: "font-bold",
+                      }),
+                      Math.abs(s.deltaSeconds) < 0.001
                         ? "text-zinc-400"
                         : positive
                           ? "text-behind"
                           : "text-ahead",
                     )}
                   >
-                    {delta <= 0 ? "" : "+"}
-                    {delta.toFixed(3)}s
+                    {s.deltaSeconds <= 0 ? "" : "+"}
+                    {s.deltaSeconds.toFixed(3)}s
                   </td>
-                  <td className="text-right py-1.5 px-2 font-mono text-zinc-400">
+                  <td
+                    className={tableCellClass({
+                      align: "right",
+                      mono: true,
+                      className: "text-zinc-400",
+                    })}
+                  >
                     {msToLapTime(s.playerBest)}
                   </td>
-                  <td className="text-right py-1.5 px-2 font-mono text-zinc-400">
+                  <td
+                    className={tableCellClass({
+                      align: "right",
+                      mono: true,
+                      className: "text-zinc-400",
+                    })}
+                  >
                     {msToLapTime(s.rivalBest)}
                   </td>
-                  <td className="text-right py-1.5 px-2 font-mono text-zinc-500">
+                  <td
+                    className={tableCellClass({
+                      align: "right",
+                      mono: true,
+                      className: "text-zinc-500",
+                    })}
+                  >
                     {s.playerLapCount} / {s.rivalLapCount}
                   </td>
                 </tr>

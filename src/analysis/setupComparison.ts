@@ -4,16 +4,20 @@ import type {
   SessionSummary,
   TelemetrySession,
 } from "../types/telemetry";
+import { findPlayer, isRaceSession } from "../utils/stats/drivers";
+import { getBestLapTime, getCleanRaceLapSamples } from "../utils/stats/laps";
+import { medianPaceInRange } from "../utils/stats/pace";
 import {
-  findPlayer,
-  getBestLapTime,
-  getCleanRaceLapSamples,
   getCompletedStints,
   getDriverStints,
-  isRaceSession,
-  medianPaceInRange,
   stintWearRate,
-} from "./stats";
+} from "../utils/stats/tyres";
+
+/**
+ * Race setup analysis groups sessions by identical mechanical setup, then ranks
+ * them on same-compound pace, stint pace, and degradation. UI components render
+ * the returned candidates; setup identity/scoring belongs here.
+ */
 
 type SetupFingerprintKey = Exclude<keyof CarSetup, "fuel-load" | "is-valid">;
 
@@ -41,6 +45,10 @@ const SETUP_FINGERPRINT_KEYS: readonly SetupFingerprintKey[] = [
   "front-right-tyre-pressure",
   "ballast",
 ];
+
+// Fuel load is excluded from identity on purpose: it is a race-plan variable,
+// not a mechanical setup. Validity is also excluded because it describes the
+// export, not the car.
 
 export type RaceSetupStrengthKind =
   | "most-promising"
@@ -276,7 +284,9 @@ function getBestStintPaces(player: DriverData): BestStintPace[] {
 }
 
 function getBestStintPace(player: DriverData): BestStintPace | null {
-  return getBestStintPaces(player).sort((a, b) => a.paceMs - b.paceMs)[0] ?? null;
+  return (
+    getBestStintPaces(player).sort((a, b) => a.paceMs - b.paceMs)[0] ?? null
+  );
 }
 
 function wearSamplesByCompound(player: DriverData): Map<string, number[]> {
@@ -374,14 +384,21 @@ function pushStrength(
   strengths: RaceSetupStrength[],
   strength: RaceSetupStrength,
 ): void {
-  if (strengths.some((existing) => strengthKey(existing) === strengthKey(strength))) {
+  if (
+    strengths.some(
+      (existing) => strengthKey(existing) === strengthKey(strength),
+    )
+  ) {
     return;
   }
 
   strengths.push(strength);
 }
 
-function hasFairWin(candidate: RaceSetupCandidate, kind: RaceSetupStrengthKind): boolean {
+function hasFairWin(
+  candidate: RaceSetupCandidate,
+  kind: RaceSetupStrengthKind,
+): boolean {
   return candidate.strengths.some((strength) => strength.kind === kind);
 }
 
@@ -389,7 +406,8 @@ function strengthCount(
   candidate: RaceSetupCandidate,
   kind: RaceSetupStrengthKind,
 ): number {
-  return candidate.strengths.filter((strength) => strength.kind === kind).length;
+  return candidate.strengths.filter((strength) => strength.kind === kind)
+    .length;
 }
 
 function chooseComparableMetric(
@@ -397,7 +415,8 @@ function chooseComparableMetric(
   next: RaceSetupComparableMetric,
 ): RaceSetupComparableMetric {
   if (!current) return next;
-  if (next.delta !== current.delta) return next.delta < current.delta ? next : current;
+  if (next.delta !== current.delta)
+    return next.delta < current.delta ? next : current;
   if (next.sampleCount !== current.sampleCount) {
     return next.sampleCount > current.sampleCount ? next : current;
   }
@@ -410,11 +429,16 @@ function applyFairCompoundComparison(
   comparableField: ComparableMetricField,
   strengthKind: RaceSetupStrengthKind,
 ): RaceSetupCandidate[] {
+  // Fair comparisons happen within compound buckets. A medium stint and hard
+  // stint can both be useful, but ranking them directly would mostly compare
+  // tyre choice and fuel phase instead of setup quality.
   const nextCandidates = candidates.map((candidate) => ({
     ...candidate,
     strengths: [...candidate.strengths],
   }));
-  const candidateById = new Map(nextCandidates.map((candidate) => [candidate.id, candidate]));
+  const candidateById = new Map(
+    nextCandidates.map((candidate) => [candidate.id, candidate]),
+  );
   const entriesByCompound = new Map<
     string,
     { candidate: RaceSetupCandidate; metric: RaceSetupCompoundMetric }[]
@@ -429,10 +453,13 @@ function applyFairCompoundComparison(
   }
 
   entriesByCompound.forEach((entries) => {
-    const candidateCount = new Set(entries.map((entry) => entry.candidate.id)).size;
+    const candidateCount = new Set(entries.map((entry) => entry.candidate.id))
+      .size;
     if (candidateCount < MIN_FAIR_COMPARISON_SETUPS) return;
 
-    const winningValue = Math.min(...entries.map((entry) => entry.metric.value));
+    const winningValue = Math.min(
+      ...entries.map((entry) => entry.metric.value),
+    );
 
     entries.forEach(({ candidate, metric }) => {
       const target = candidateById.get(candidate.id);
@@ -462,7 +489,9 @@ function applyFairCompoundComparison(
   return nextCandidates;
 }
 
-function withComparisonMetadata(candidates: RaceSetupCandidate[]): RaceSetupCandidate[] {
+function withComparisonMetadata(
+  candidates: RaceSetupCandidate[],
+): RaceSetupCandidate[] {
   const fastestLap = minValue(candidates, (candidate) => candidate.bestLapMs);
   let nextCandidates: RaceSetupCandidate[] = candidates.map((candidate) => ({
     ...candidate,
@@ -495,21 +524,21 @@ function withComparisonMetadata(candidates: RaceSetupCandidate[]): RaceSetupCand
     let weight = 0;
     let metricCount = 0;
 
-    ([
-      "comparablePace",
-      "comparableStint",
-      "comparableWear",
-    ] as const).forEach((field) => {
-      const metric = candidate[field];
-      if (!metric) return;
-      const metricWeight = FAIR_SCORE_WEIGHTS[field];
-      // Lower is better for all three fair setup dimensions. This keeps the
-      // score relative to an actually comparable same-compound benchmark
-      // instead of mixing Soft pace with Hard degradation and overclaiming.
-      score += Math.min(1, (metric.value - metric.delta) / metric.value) * metricWeight;
-      weight += metricWeight;
-      metricCount += 1;
-    });
+    (["comparablePace", "comparableStint", "comparableWear"] as const).forEach(
+      (field) => {
+        const metric = candidate[field];
+        if (!metric) return;
+        const metricWeight = FAIR_SCORE_WEIGHTS[field];
+        // Lower is better for all three fair setup dimensions. This keeps the
+        // score relative to an actually comparable same-compound benchmark
+        // instead of mixing Soft pace with Hard degradation and overclaiming.
+        score +=
+          Math.min(1, (metric.value - metric.delta) / metric.value) *
+          metricWeight;
+        weight += metricWeight;
+        metricCount += 1;
+      },
+    );
 
     return {
       ...candidate,
@@ -522,14 +551,12 @@ function withComparisonMetadata(candidates: RaceSetupCandidate[]): RaceSetupCand
   nextCandidates = nextCandidates.map((candidate) => {
     let rankScore = 0;
 
-    ([
-      "fastest-lap",
-      "best-pace",
-      "best-stint",
-      "lowest-deg",
-    ] as const).forEach((kind) => {
-      rankScore += strengthCount(candidate, kind) * RANK_STRENGTH_POINTS[kind];
-    });
+    (["fastest-lap", "best-pace", "best-stint", "lowest-deg"] as const).forEach(
+      (kind) => {
+        rankScore +=
+          strengthCount(candidate, kind) * RANK_STRENGTH_POINTS[kind];
+      },
+    );
 
     // Ranking is intentionally speed-first. Tyre degradation is useful, but a
     // low-deg setup should not appear above a setup that is clearly faster on
@@ -553,8 +580,7 @@ function withComparisonMetadata(candidates: RaceSetupCandidate[]): RaceSetupCand
     }
     if (candidate.comparableWear) {
       rankScore -=
-        candidate.comparableWear.delta *
-        RANK_DELTA_PENALTIES.wearPerPercent;
+        candidate.comparableWear.delta * RANK_DELTA_PENALTIES.wearPerPercent;
     }
 
     return { ...candidate, rankScore };
@@ -581,6 +607,9 @@ function withComparisonMetadata(candidates: RaceSetupCandidate[]): RaceSetupCand
       hasFairWin(candidate, "best-stint"),
   );
 
+  // Only elevate a "most promising" setup when one candidate clearly wins the
+  // speed-sensitive evidence. If there is a tie, keep individual strengths
+  // visible without over-claiming a single recommendation.
   if (mostPromising && bestRankedCandidates.length === 1) {
     nextCandidates = nextCandidates.map((candidate) => ({
       ...candidate,
@@ -724,9 +753,13 @@ export function buildRaceSetupComparison(
       if (scoreDiff !== 0) return scoreDiff;
       const lapDiff = sortableMetric(a.bestLapMs) - sortableMetric(b.bestLapMs);
       if (lapDiff !== 0) return lapDiff;
-      const paceDiff = sortableMetric(a.medianCleanPaceMs) - sortableMetric(b.medianCleanPaceMs);
+      const paceDiff =
+        sortableMetric(a.medianCleanPaceMs) -
+        sortableMetric(b.medianCleanPaceMs);
       if (paceDiff !== 0) return paceDiff;
-      const wearDiff = sortableMetric(a.avgWearRatePerLap) - sortableMetric(b.avgWearRatePerLap);
+      const wearDiff =
+        sortableMetric(a.avgWearRatePerLap) -
+        sortableMetric(b.avgWearRatePerLap);
       if (wearDiff !== 0) return wearDiff;
       return b.sampleCount - a.sampleCount;
     })

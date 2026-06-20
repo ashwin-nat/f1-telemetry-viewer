@@ -8,9 +8,10 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
-import type { CumulativeDelta } from "../utils/stats";
-import { CHART_THEME, TOOLTIP_STYLE } from "../utils/colors";
+import type { CumulativeDelta } from "../utils/stats/laps";
+import { CHART_THEME, TOOLTIP_STYLE } from "../constants/colors";
 import { cn } from "../utils/cn";
+import { SectionHeader } from "./ui/SectionHeader";
 
 interface PerformanceDeltaChartProps {
   deltas: CumulativeDelta[];
@@ -50,13 +51,16 @@ export function PerformanceDeltaChart({
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-zinc-300 mb-1">
-        Performance Delta{" "}
-        <span className="font-normal text-zinc-500">vs {rivalName}</span>
-      </h3>
-      <p className="text-2xs text-zinc-600 mb-2">
-        Above zero = behind {rivalName} / Below zero = ahead
-      </p>
+      <SectionHeader
+        size="sm"
+        title={
+          <>
+            Performance Delta{" "}
+            <span className="font-normal text-zinc-500">vs {rivalName}</span>
+          </>
+        }
+        hint={`Above zero = behind ${rivalName} / Below zero = ahead`}
+      />
       <ResponsiveContainer width="100%" height={240}>
         <AreaChart
           data={data}
@@ -64,12 +68,28 @@ export function PerformanceDeltaChart({
         >
           <defs>
             <linearGradient id="behindGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={CHART_THEME.behind} stopOpacity={0.3} />
-              <stop offset="100%" stopColor={CHART_THEME.behind} stopOpacity={0.05} />
+              <stop
+                offset="0%"
+                stopColor={CHART_THEME.behind}
+                stopOpacity={0.3}
+              />
+              <stop
+                offset="100%"
+                stopColor={CHART_THEME.behind}
+                stopOpacity={0.05}
+              />
             </linearGradient>
             <linearGradient id="aheadGrad" x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stopColor={CHART_THEME.ahead} stopOpacity={0.3} />
-              <stop offset="100%" stopColor={CHART_THEME.ahead} stopOpacity={0.05} />
+              <stop
+                offset="0%"
+                stopColor={CHART_THEME.ahead}
+                stopOpacity={0.3}
+              />
+              <stop
+                offset="100%"
+                stopColor={CHART_THEME.ahead}
+                stopOpacity={0.05}
+              />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} />
@@ -115,9 +135,7 @@ export function PerformanceDeltaChart({
                       <span className="ml-1 text-active">PIT</span>
                     )}
                     {d.rivalPit && (
-                      <span className="ml-1 text-warning">
-                        {rivalName} PIT
-                      </span>
+                      <span className="ml-1 text-warning">{rivalName} PIT</span>
                     )}
                   </div>
                   <div

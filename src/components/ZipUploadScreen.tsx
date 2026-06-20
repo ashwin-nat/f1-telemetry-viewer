@@ -17,7 +17,7 @@ import {
   AUTHOR_NAME,
   AUTHOR_SITE_URL,
   REPO_URL,
-} from "../utils/links";
+} from "../constants/links";
 import { AppBrand } from "./AppBrand";
 import { Modal } from "./ui/Modal";
 import { HStack, VStack } from "./ui/Stack";
@@ -133,7 +133,10 @@ export function ZipUploadScreen({
             </>
           ) : (
             <>
-              <HStack justify="center" className="h-10 w-10 rounded-full bg-zinc-900">
+              <HStack
+                justify="center"
+                className="h-10 w-10 rounded-full bg-zinc-900"
+              >
                 <Upload className="h-4 w-4 text-zinc-400" />
               </HStack>
               <div>
@@ -161,7 +164,11 @@ export function ZipUploadScreen({
       {/* Info footer */}
       <div className="w-full px-10 pt-6 pb-8 text-center space-y-4">
         <div className="h-px bg-zinc-900" />
-        <HStack as="p" justify="center" className="gap-1.5 text-xs text-zinc-500">
+        <HStack
+          as="p"
+          justify="center"
+          className="gap-1.5 text-xs text-zinc-500"
+        >
           <ShieldCheck className="h-3.5 w-3.5 text-ahead" />
           100% client-side — your telemetry never leaves your browser
         </HStack>

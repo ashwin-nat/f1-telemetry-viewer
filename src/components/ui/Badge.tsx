@@ -1,17 +1,25 @@
 import { cn } from "../../utils/cn";
 
-export type BadgeTone = "red" | "amber" | "yellow" | "green" | "sky" | "rose" | "purple" | "zinc";
+export type BadgeTone =
+  | "red"
+  | "amber"
+  | "yellow"
+  | "green"
+  | "sky"
+  | "rose"
+  | "purple"
+  | "zinc";
 export type BadgeSize = "sm" | "xs";
 export type BadgeShape = "pill" | "square";
 
 const SIZE: Record<BadgeSize, string> = {
-  sm: "px-2 py-0.5 text-2xs font-semibold",
-  xs: "px-1 py-0.5 text-[9px] font-bold",
+  sm: "px-2.5 py-1 text-2xs font-semibold",
+  xs: "px-2 py-1 text-3xs font-bold",
 };
 
 const SHAPE: Record<BadgeShape, string> = {
   pill: "rounded-full",
-  square: "rounded",
+  square: "rounded-md",
 };
 
 const TONE: Record<BadgeTone, string> = {
@@ -28,7 +36,7 @@ const TONE: Record<BadgeTone, string> = {
 /**
  * Small rounded status badge — counts, alerts, tags.
  *
- * - `size`: `sm` (default, `text-2xs`) or `xs` (`text-[9px]`, tighter padding,
+ * - `size`: `sm` (default, `text-2xs`) or `xs` (`text-3xs`, tighter padding,
  *   bolder — used for in-row chips like INVALID / SC / penalties).
  * - `shape`: `pill` (default, `rounded-full`) or `square` (`rounded`) for
  *   in-text tags where a full pill looks too bubbly.

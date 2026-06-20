@@ -31,7 +31,8 @@ import type { SessionSummary } from "../types/telemetry";
  *     Auto-saves are written incrementally, so the most recent save almost
  *     always represents at least as much running as the earlier ones. We
  *     hide an auto-save iff some other save in the same broad bucket
- *     (track, sessionType, formula, gameYear, calendar day) has:
+ *     (track, sessionType, formula, gameYear, online/offline mode,
+ *      calendar day) has:
  *         best lap time <= the auto-save's   (equally fast or faster)
  *       AND
  *         valid lap count >= the auto-save's (at least as many laps)
@@ -49,7 +50,9 @@ const DUPLICATE_WINDOW_MS = 30_000;
 
 type WithFileSize = SessionSummary & { fileSize: number };
 
-export function deduplicateSessions<T extends WithFileSize>(sessions: T[]): T[] {
+export function deduplicateSessions<T extends WithFileSize>(
+  sessions: T[],
+): T[] {
   // Shared state: which inputs are dropped, and how many drops "belong to"
   // each surviving session (so we can show "N duplicate saves hidden").
   const removed = new Set<T>();
@@ -99,6 +102,7 @@ function applyTimeWindowRule<T extends WithFileSize>(
           s.gameYear ?? "",
           s.packetFormat ?? "",
           s.formula ?? "",
+          s.isOnline ? "online" : "offline",
           s.sessionType,
           s.track,
           s.validLapCount,
@@ -112,7 +116,9 @@ function applyTimeWindowRule<T extends WithFileSize>(
     if (group.length < 2) continue;
     // Ascending so we can walk the timeline and merge chains
     // (A → B → C all within 30 s of each neighbour).
-    group.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    group.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
 
     let keeper = group[0];
     for (let i = 1; i < group.length; i++) {
@@ -161,11 +167,11 @@ function applyAutoSaveDominanceRule<T extends WithFileSize>(
   removed: Set<T>,
   recordDrop: (keep: T, drop: T) => void,
 ): void {
-  // Broad bucket: same track + session type + formula + game year, on the
-  // same calendar day. We deliberately do NOT key on session UID or lap count
-  // here: auto-save snapshots can have distinct UIDs even when a later save
-  // supersedes them, and the whole point is to compare different progress
-  // points from the same on-track run.
+  // Broad bucket: same track + session type + formula + game year + network
+  // mode, on the same calendar day. We deliberately do NOT key on session UID
+  // or lap count here: auto-save snapshots can have distinct UIDs even when a
+  // later save supersedes them, and the whole point is to compare different
+  // progress points from the same on-track run.
   const buckets = new Map<string, T[]>();
   for (const s of sessions) {
     if (removed.has(s)) continue;
@@ -173,6 +179,7 @@ function applyAutoSaveDominanceRule<T extends WithFileSize>(
     const key = [
       s.gameYear ?? "",
       s.formula ?? "",
+      s.isOnline ? "online" : "offline",
       s.sessionType,
       s.track,
       day,
@@ -190,7 +197,9 @@ function applyAutoSaveDominanceRule<T extends WithFileSize>(
     // Newest first — useful both for the tiebreaker (we want the latest
     // auto-save to survive when there's no regular save) and so the loop
     // body has a natural "compare against everyone else newer or equal".
-    bucket.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    bucket.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
 
     for (const candidate of bucket) {
       if (removed.has(candidate)) continue;
@@ -227,7 +236,9 @@ function applyAutoSaveDominanceRule<T extends WithFileSize>(
       let bestDistance = Number.POSITIVE_INFINITY;
       for (const other of bucket) {
         if (!isEligible(other)) continue;
-        const distance = Math.abs(new Date(other.date).getTime() - candidateTime);
+        const distance = Math.abs(
+          new Date(other.date).getTime() - candidateTime,
+        );
         if (distance < bestDistance) {
           bestDistance = distance;
           dominator = other;
