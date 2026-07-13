@@ -42,6 +42,22 @@ interface TelemetryContextValue {
 
 const TelemetryContext = createContext<TelemetryContextValue | null>(null);
 
+// Resolves the session-list poll interval (ms), preferring the runtime config injected
+// by Pits n' Giggles (window.__PNG_SAVE_VIEWER_CONFIG__, already in ms) over the build-time
+// env var used by standalone/dev deployments of this submodule (in seconds). 0 or unset
+// disables polling.
+function getSessionPollIntervalMs(): number {
+  const injected = (
+    window as Window & {
+      __PNG_SAVE_VIEWER_CONFIG__?: { sessionPollIntervalMs?: number | null };
+    }
+  ).__PNG_SAVE_VIEWER_CONFIG__?.sessionPollIntervalMs;
+  if (typeof injected === "number") return injected;
+  const intervalSecs =
+    Number(import.meta.env.VITE_SESSION_POLL_INTERVAL_S) || 0;
+  return intervalSecs * 1000;
+}
+
 export function useTelemetry() {
   const ctx = useContext(TelemetryContext);
   if (!ctx)
@@ -91,6 +107,21 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
     () => formulaOptions.find((option) => option.key === activeFormulaKey),
     [activeFormulaKey, formulaOptions],
   );
+  // Re-fetch the session list from the API. Used by polling and tab-focus
+  // refresh — failures are swallowed so a transient network blip doesn't
+  // clobber an otherwise-working session list with an error state.
+  const fetchSessions = useCallback(() => {
+    fetch(`${import.meta.env.BASE_URL}api/sessions`)
+      .then((res) => {
+        if (!res.ok) throw new Error("API unavailable");
+        return res.json() as Promise<SessionSummary[]>;
+      })
+      .then((data) => setSessions(data))
+      .catch(() => {
+        // keep the stale list; next poll/focus will retry
+      });
+  }, []);
+
   // Detect mode on mount
   useEffect(() => {
     const tryDemo = () =>
@@ -125,6 +156,30 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
       .catch(() => tryDemo())
       .finally(() => setSessionsLoading(false));
   }, []);
+
+  // Background polling — off by default in the raw submodule (VITE_SESSION_POLL_INTERVAL_S
+  // unset), configured at runtime via window.__PNG_SAVE_VIEWER_CONFIG__ when served through
+  // Pits n' Giggles' own settings UI. Only meaningful in "api" mode: demo/upload data has no
+  // live filesystem backing it.
+  useEffect(() => {
+    if (mode !== "api") return;
+    const intervalMs = getSessionPollIntervalMs();
+    if (intervalMs <= 0) return;
+    const id = setInterval(fetchSessions, intervalMs);
+    return () => clearInterval(id);
+  }, [mode, fetchSessions]);
+
+  // Refetch whenever the tab regains focus/visibility, independent of polling, so a
+  // session saved while the tab was backgrounded shows up as soon as the user returns.
+  useEffect(() => {
+    if (mode !== "api") return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") fetchSessions();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [mode, fetchSessions]);
 
   const getSession = useCallback(
     (slug: string): Promise<TelemetrySession> => {
