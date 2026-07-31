@@ -267,6 +267,7 @@ export function getUnknownRaceControlDetails(
 export function getRaceControlSearchText(
   event: RaceControlEvent,
   firstTimestamp: number | undefined,
+  lapLabel = formatRaceControlLap(event),
 ): string {
   const driverInfos = getRaceControlDriverInfos(event);
   const location = formatRaceControlLocation(event);
@@ -282,7 +283,7 @@ export function getRaceControlSearchText(
     event.id,
     event["message-type"],
     humanizeRaceControlType(event["message-type"]),
-    formatRaceControlLap(event),
+    lapLabel,
     formatRaceControlClock(event, firstTimestamp),
     formatRaceControlEvent(event),
     location,
@@ -305,6 +306,7 @@ export function raceControlEventMatchesSearch(
   event: RaceControlEvent,
   query: string,
   firstTimestamp: number | undefined,
+  lapLabel?: string,
 ): boolean {
   const terms = normalizeRaceControlSearchText(query)
     .split(/\s+/)
@@ -312,7 +314,7 @@ export function raceControlEventMatchesSearch(
   if (terms.length === 0) return true;
 
   const haystack = normalizeRaceControlSearchText(
-    getRaceControlSearchText(event, firstTimestamp),
+    getRaceControlSearchText(event, firstTimestamp, lapLabel),
   );
   return terms.every((term) => haystack.includes(term));
 }
