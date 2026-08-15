@@ -5,7 +5,11 @@ import {
   buildSessionInsightsHint,
   buildSessionSummaryInsights,
 } from "../analysis/sessionInsightSummary";
-import { buildEventLocationBreakdown } from "../analysis/eventLocationBreakdown";
+import {
+  buildEventLocationBreakdown,
+  excludePitLaneOvertakes,
+  hasLocationBreakdownEvents,
+} from "../analysis/eventLocationBreakdown";
 import { buildStartReactionModel } from "../analysis/startReactionAnalysis";
 import {
   buildDriverSpeedComparison,
@@ -211,11 +215,19 @@ export function RaceSessionView({
     [raceControlEvents],
   );
   const overtakeLocations = useMemo(
-    () => buildEventLocationBreakdown(raceControlEvents, "OVERTAKE"),
+    () =>
+      buildEventLocationBreakdown(
+        excludePitLaneOvertakes(raceControlEvents),
+        "OVERTAKE",
+      ),
     [raceControlEvents],
   );
   const collisionLocations = useMemo(
     () => buildEventLocationBreakdown(raceControlEvents, "COLLISION"),
+    [raceControlEvents],
+  );
+  const hasLocationEvents = useMemo(
+    () => hasLocationBreakdownEvents(raceControlEvents),
     [raceControlEvents],
   );
   const filteredOvertakes = useMemo(
@@ -498,7 +510,7 @@ export function RaceSessionView({
             </Card>
             {/* Flags, fastest laps, and other timeline events do not give
                 either location chart anything to plot. */}
-            {(overtakeLocations.total > 0 || collisionLocations.total > 0) && (
+            {hasLocationEvents && (
               <div className="grid gap-6 md:grid-cols-2">
                 <Card as="section">
                   <EventLocationPieChart
@@ -506,14 +518,14 @@ export function RaceSessionView({
                     unit="overtake"
                     breakdown={overtakeLocations}
                     emptyMessage="No overtakes were recorded for this session."
+                    source={{
+                      events: raceControlEvents,
+                      messageType: "OVERTAKE",
+                    }}
+                    pitLaneToggle
                     focus={
                       focusedDriver
-                        ? {
-                            driver: focusedDriver,
-                            mode: "overtaker",
-                            events: raceControlEvents,
-                            messageType: "OVERTAKE",
-                          }
+                        ? { driver: focusedDriver, mode: "overtaker" }
                         : undefined
                     }
                   />
@@ -524,14 +536,13 @@ export function RaceSessionView({
                     unit="collision"
                     breakdown={collisionLocations}
                     emptyMessage="No collisions were recorded for this session."
+                    source={{
+                      events: raceControlEvents,
+                      messageType: "COLLISION",
+                    }}
                     focus={
                       focusedDriver
-                        ? {
-                            driver: focusedDriver,
-                            mode: "involved",
-                            events: raceControlEvents,
-                            messageType: "COLLISION",
-                          }
+                        ? { driver: focusedDriver, mode: "involved" }
                         : undefined
                     }
                   />

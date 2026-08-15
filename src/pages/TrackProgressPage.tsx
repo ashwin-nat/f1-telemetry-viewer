@@ -59,7 +59,10 @@ import {
   type TrackSessionData,
   type TrackSessionKind,
 } from "../analysis/trackAnalysis";
-import { buildTrackLocationBreakdowns } from "../analysis/eventLocationBreakdown";
+import {
+  buildTrackLocationBreakdowns,
+  hasLocationBreakdownEvents,
+} from "../analysis/eventLocationBreakdown";
 import { buildTrackRivalBenchmark } from "../analysis/rivalStats";
 import { CHART_THEME, SECTOR_COLORS, TOOLTIP_STYLE } from "../constants/colors";
 import { getSessionFormulaScopeKey } from "../utils/formulaScope";
@@ -248,11 +251,16 @@ export function TrackProgressPage() {
   const {
     overtakes: overtakeLocations,
     collisions: collisionLocations,
+    events: locationEvents,
     locatedRaceCount,
     excludedRaceCount,
   } = useMemo(
     () => buildTrackLocationBreakdowns(raceEventLists),
     [raceEventLists],
+  );
+  const hasLocationEvents = useMemo(
+    () => hasLocationBreakdownEvents(locationEvents),
+    [locationEvents],
   );
   const allRaceSetupCandidates = useMemo(
     () => buildRaceSetupCandidates(raceDataAll),
@@ -1371,8 +1379,7 @@ export function TrackProgressPage() {
                   total (not located) events so tracks whose races lack location
                   fields still render the cards with an explanation instead of
                   silently disappearing. */}
-              {(overtakeLocations.total > 0 ||
-                collisionLocations.total > 0) && (
+              {hasLocationEvents && (
                 <div>
                   <div className="grid gap-6 md:grid-cols-2">
                     <section className={cardClass}>
@@ -1381,6 +1388,11 @@ export function TrackProgressPage() {
                         unit="overtake"
                         breakdown={overtakeLocations}
                         emptyMessage="No overtakes were recorded at this track."
+                        source={{
+                          events: locationEvents,
+                          messageType: "OVERTAKE",
+                        }}
+                        pitLaneToggle
                       />
                     </section>
                     <section className={cardClass}>
