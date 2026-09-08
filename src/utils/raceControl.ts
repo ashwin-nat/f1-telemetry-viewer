@@ -243,7 +243,7 @@ export function formatRaceControlEvent(event: RaceControlEvent): string {
     case "OVERTAKE_MODE_DISABLED":
       return "Overtake mode disabled";
     case "DRIVER_AI_STATUS_CHANGE":
-      return `${driverName(event["driver-info"])} switched to ${event["new-state"] ? "AI" : "human"} control`;
+      return formatAiStatusChangeEvent(event);
     default:
       return humanizeRaceControlType(event["message-type"]);
   }
@@ -357,6 +357,20 @@ function withReason(base: string, reason: unknown): string {
 
 function formatStopTime(stopTime: unknown): string {
   return typeof stopTime === "number" && stopTime > 0 ? ` (${stopTime}s)` : "";
+}
+
+/**
+ * The AI-controlled flag flips when a player hands their car over and takes it
+ * back, so the two transitions read as the driver pausing and resuming:
+ * false -> true is a pause, true -> false is a resume.
+ */
+function formatAiStatusChangeEvent(event: RaceControlEvent): string {
+  const name = driverName(event["driver-info"]);
+  if (typeof event["new-state"] !== "boolean")
+    return `${name} changed AI status`;
+  return event["new-state"]
+    ? `${name} paused (AI took over)`
+    : `${name} resumed (back in control)`;
 }
 
 function formatSafetyCarEvent(event: RaceControlEvent): string {
